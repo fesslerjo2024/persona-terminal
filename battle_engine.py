@@ -1,6 +1,7 @@
 """Offline Velvet Room combat rules. Scenario numbers are tuned for this simulation."""
 from dataclasses import dataclass,field
 import random, math
+import crown_dispatch
 from battle_data import SKILLS, TEAM, PERSONAS, ITEMS, ENEMIES, ENCOUNTERS
 
 DEFAULT_ATTACK=dict(kind='damage',element='Physical',power=29,target='enemy',accuracy=96)
@@ -33,6 +34,8 @@ class Unit:
  status:str=''
  status_turns:int=0
  buffs:dict=field(default_factory=dict)
+ model_key:str=''
+ away:bool=False
  def __post_init__(self):self.max_hp=self.hp;self.max_sp=self.sp;self.ammo=self.max_ammo
  @property
  def alive(self):return self.hp>0
@@ -56,6 +59,7 @@ class Battle:
   self._showtime_rng=random.Random(None if seed is None else seed ^ 0x57071)
   self._showtime=None;self._showtime_spent=False
   self._slot_actor=None;self._slot_effects={}
+  self._story_ring=();self._story_slots={}
   self.personas=PERSONAS if persona_pool is None else persona_pool;self.persona=next(iter(self.personas));self.shifted=False
   p=self.personas[self.persona]
   stats={'hp':180,'sp':55,'ammo':5,**(joker_stats or {})}
@@ -84,6 +88,10 @@ class Battle:
   self._say(f'Trial entered: {encounter} // {difficulty}.')
   self._spawn();self._advance()
  @property
+ def combat_allies(self):
+  """Deployed fighters on the field; away allies retain their schedule slots."""
+  return [u for u in self.allies if not u.away]
+ @property
  def visible_enemies(self):
   if not self.story:return self.enemies
   from weekend_bosses import hidden_enemies
@@ -104,10 +112,10 @@ class Battle:
   for pair in self.config.get('showtime_pairs',()):
    if a.name not in pair or not roster.issuperset(pair):continue
    partner=active.get(next(n for n in pair if n!=a.name))
-   if partner and (not partner.alive or partner.down or partner.status in ('sleep','freeze','fear')):continue
+   if partner and (partner.away or not partner.alive or partner.down or partner.status in ('sleep','freeze','fear')):continue
    options.append(pair)
   if not options:return
-  danger=any(u.alive and 3*u.hp<=u.max_hp for u in self.allies)
+  danger=any(u.alive and 3*u.hp<=u.max_hp for u in self.combat_allies)
   finisher=any(u.alive and 4*u.hp<=u.max_hp for u in self.enemies)
   if (baton or danger or finisher) and self._showtime_rng.random()<(.48 if baton else .16):
    self._showtime=self._showtime_rng.choice(options)
@@ -118,7 +126,7 @@ class Battle:
   """Scheduled movers after the current action, including across a round boundary."""
   if self.phase!='turn':return []
   return [u for u in (self.order[self.cursor+1:]+self.next_order)
-          if u.alive and u.status not in ('sleep','freeze')
+          if u.alive and not u.away and u.status not in ('sleep','freeze')
           and not (u.status=='burn' and u.hp<=max(1,u.max_hp//12))][:len(self.order)]
  def _roll_order(self):
   roster=self.allies+self.enemies
@@ -132,12 +140,59 @@ class Battle:
   absent=[u for u in roster if not u.alive]
   for u in absent:live.insert(self.initiative_rng.randrange(len(live)+1),u)
   return live
+ def _ready_for_opening(self,u):
+  return (not u.enemy and u.alive and not u.away and u.status not in ('sleep','freeze','shock','fear','confuse')
+          and not (u.status=='burn' and u.hp<=max(1,u.max_hp//12)))
+ def _story_order(self):
+  """Reuse one shuffled slot ring; a new formation replaces only enemy occupants."""
+  roster=self.allies+self.enemies
+  # Resolve the old *scheduled* slot before rebinding. A Baton recipient can
+  # take the finishing action without having advanced the initiative cursor.
+  previous=self._slot_actor
+  anchor=self._story_slots.get(previous)
+  self._story_slots={u:i for i,u in enumerate(roster)}
+  if not self._story_ring:
+   base=self._roll_order()
+   opener=next((u for u in base if self._ready_for_opening(u)),None)
+   if opener is None:opener=next((u for u in base if u.alive and not u.enemy),None)
+   if opener is not None:base.remove(opener);base.insert(0,opener)
+   ring=[self._story_slots[u] for u in base]
+   # Reserve ranks for later, larger waves, while preserving the exact old
+   # first-wave draw. Put each new enemy rank in the least occupied ally
+   # gap; ties are settled by the already shuffled party order.
+   ally_count=len(self.allies)
+   for extra in range(len(roster),ally_count+max(map(len,self.waves))):
+    if not self.shuffle_turns:
+     ring.append(extra);continue
+    def gap(i):
+     return next(j for j in range(1,len(ring)+1) if ring[(i+j)%len(ring)]<ally_count)
+    place=min((i for i,slot in enumerate(ring) if slot<ally_count),key=gap)
+    ring.insert(place+1,extra)
+   self._story_ring=tuple(ring)
+   return base
+  ring=self._story_ring
+  if anchor is not None:
+   start=ring.index(anchor)+1
+   ring=ring[start:]+ring[:start]
+  order=[roster[i] for i in ring if i<len(roster)]
+  if self.config.get('wave_response') or self.wave in self.config.get('response_waves',()):
+   ready=[u for u in order if self._ready_for_opening(u)]
+   opener=next((u for u in ready if u is not previous),None)
+   if opener is None and ready:opener=ready[0]  # Solo or all other allies unable to act.
+   if opener is not None:
+    # Change the starting point, not the pattern. Nobody gets a bonus
+    # slot, and every fighter still gets at most one ordinary slot per round.
+    start=order.index(opener)
+    order=order[start:]+order[:start]
+    self._say('A brief opening: one Thief moves before this formation.')
+  return order
  def _spawn(self):
   names=self.waves[self.wave-1]; totals={n:names.count(n) for n in names};counts={}
   self.enemies=[]
   for n in names:
    counts[n]=counts.get(n,0)+1
    u=_unit(n,self.enemy_data[n],True)
+   u.model_key=n
    if totals[n]>1:u.name=f'{n} {chr(64+counts[n])}'
    self.enemies.append(u)
   if self.story and self.config.get('party_size')==1:
@@ -147,10 +202,14 @@ class Battle:
     if u.alive:
      u.hp=min(u.max_hp,u.hp+round(u.max_hp*.26));u.sp=min(u.max_sp,u.sp+8)
    self._say('Between waves: standing allies catch their breath and recover some HP/SP.')
-  self.order=self._roll_order()
-  if self.story and self.wave==1:
-   opener=next(u for u in self.order if not u.enemy and u.alive)
-   self.order.remove(opener);self.order.insert(0,opener)
+  intermission=self.config.get('spaceport_intermission')
+  if self.story and intermission and self.wave==intermission['wave']:
+   for u in self.allies:
+    if u.alive:
+     u.hp=max(u.hp,u.max_hp*intermission['hp_floor_pct']//100)
+     u.sp=max(u.sp,min(u.max_sp,intermission['sp_floor']))
+   self._say('Maintenance break: standing Thieves recover to minimum HP and SP.')
+  self.order=self._story_order() if self.story else self._roll_order()
   self.next_order=self.order[:] if self.story else self._roll_order();self.cursor=-1
   self._boss_state={};self._story_intent='';self._showtime=None
   for u in self.allies:
@@ -161,7 +220,7 @@ class Battle:
   self._say(f'Wave {self.wave}/{self.wave_count}: '+', '.join(u.name for u in self.visible_enemies)+'. Ammo refilled.')
  @property
  def allout_fighters(self):
-  return sum(u.alive and not u.down for u in self.allies)
+  return sum(u.alive and not u.down for u in self.combat_allies)
  @property
  def allout_damage(self):
   return 32*self.allout_fighters
@@ -171,6 +230,7 @@ class Battle:
   joker=self.allies[0]
   return bool(self.phase=='turn' and self.one_more and self.actor and not self.actor.enemy and joker.alive and not joker.down and self.allout_fighters>=2 and foes and all(u.down for u in foes))
  def _state(self):
+  if self.story:crown_dispatch.before_state(self)
   if not self.allies[0].alive:
    self.phase='loss';self._say('Joker fell. Trial failed.');return True
   if self.story:
@@ -193,7 +253,7 @@ class Battle:
      from weekend_bosses import on_round
      on_round(self)
    u=self.order[self.cursor]
-   if not u.alive:continue
+   if not u.alive or u.away:continue
    self.actor=u;self.shifted=False;u.guard=False
    self._slot_actor=u;self._slot_effects=dict(u.buffs)
    if self._reaper_charge is not None and not u.enemy:self._reaper_charge.discard(u)
@@ -269,6 +329,7 @@ class Battle:
   return 'No eligible moves for this command.'
  def action_block(self,id,target=None,persona=None,*,pick_target=False):
   """Explain an invalid standard action without changing combat state."""
+  if id==crown_dispatch.ACTION:return crown_dispatch.action_block(self,target,pick_target=pick_target)
   a=self.actor;s=self._spec(id)
   if s is None:return 'Unknown action.'
   switching=id.startswith('skill:') and persona is not None and persona!=self.persona
@@ -292,7 +353,7 @@ class Battle:
      return f'{target.name} is knocked out. Use a revival skill or item first.'
     return 'Choose a living ally.' if mode=='ally' else 'Choose a living Shadow.'
   recipients=([target] if target is not None else [a] if mode=='self' else
-              [u for u in self.allies if u.alive] if mode=='allies' else [])
+              [u for u in self.combat_allies if u.alive] if mode=='allies' else [])
   if recipients and kind in ('heal','restore'):
    resource='HP' if kind=='heal' else 'SP'
    if all(getattr(u,resource.lower())==getattr(u,'max_'+resource.lower()) for u in recipients):
@@ -301,19 +362,23 @@ class Battle:
  def targets(self,id):
   if self.phase!='turn':return []
   if id=='analyze':return [t for t in self.enemies if t.alive]
+  if id==crown_dispatch.ACTION:return crown_dispatch.runners(self)
   s=self._spec(id)
   if not s:return []
   dest=s.get('target','enemy')
   if dest=='enemy':return [t for t in self.enemies if t.alive]
-  if dest=='ally':return [t for t in self.allies if (t.alive != (s['kind']=='revive'))]
+  if dest=='ally':return [t for t in self.combat_allies if (t.alive != (s['kind']=='revive'))]
   return []
  def _baton(self):
-  return [t for t in self.allies if t.alive and not t.down and t is not self.actor and t not in self.passed and t.status not in ('sleep','freeze')]
+  return [t for t in self.combat_allies if t.alive and not t.down and t is not self.actor and t not in self.passed and t.status not in ('sleep','freeze')]
  def actions(self,cat,persona=None):
   if self.phase!='turn' or self.actor is None or self.actor.enemy:return []
   a=self.actor
   if cat=='showtime' and self._showtime:
    return [('showtime','Showtime [T]',' × '.join(self._showtime)+' • Almighty • free, once per battle.')]
+  if cat==crown_dispatch.ACTION:
+   row=crown_dispatch.command(self)
+   return [row] if row else []
   if cat=='story-special' and self.story:
    from weekend_bosses import special
    row=special(self)
@@ -355,6 +420,7 @@ class Battle:
  def _act(self,id,target,persona=None):
   if self.phase!='turn' or not self.actor or self.actor.enemy:return 'No active party turn.'
   a=self.actor
+  if id==crown_dispatch.ACTION:return crown_dispatch.use(self,target)
   if id=='story-special' and self.story:
    from weekend_bosses import use_special
    return use_special(self)
@@ -431,14 +497,14 @@ class Battle:
   if self.story and not a.enemy and target is not None and target.enemy and s['kind']=='damage':
    from weekend_bosses import intercept
    target=intercept(self,target,s)
-  ours=self.enemies if a.enemy else self.allies
-  theirs=self.allies if a.enemy else self.enemies
+  ours=self.enemies if a.enemy else self.combat_allies
+  theirs=self.combat_allies if a.enemy else self.enemies
   mode=s['target'];kind=s['kind']
   targets=[a] if mode=='self' else ([t for t in ours if t.alive] if mode=='allies' else [t for t in theirs if t.alive]) if mode in ('allies','enemies') else [target]
   self._say(f'{a.name} → {name.title() if name in ("attack","gun") else name}.')
   bonus=False
   for t in targets:
-   if t is None:continue
+   if t is None or t.away:continue
    if kind=='damage':bonus=self._strike(a,t,s) or bonus
    elif kind=='heal':
     old=t.hp;t.hp=min(t.max_hp,t.hp+int(s.get('power',0)*(1+.2*self.chain if not a.enemy else 1)));self._say(f'{t.name} recovers {t.hp-old} HP.')
@@ -487,7 +553,12 @@ class Battle:
   marked=t.status in TECH and e in TECH[t.status]
   # Physical hits shatter frozen targets' ordinary physical defenses.
   frozen_override=t.status=='freeze' and e in ('Physical','Gun')
-  if not a.enemy and t.enemy and not frozen_override:self.seen.setdefault(t.name,{})[e]=f
+  if not a.enemy and t.enemy and not frozen_override:
+   self.seen.setdefault(t.name,{})[e]=f
+   if self.story and self.config.get('share_affinity_by_rank') and t.behavior=='space-worker':
+    for peer in self.enemies:
+     if peer.model_key==t.model_key and peer.affinity.get(e,'normal')==f:
+      self.seen.setdefault(peer.name,{})[e]=f
   if frozen_override and f in ('null','repel','drain','resist'):f='normal'
   crit=e in ('Physical','Gun') and f not in ('null','repel','drain','resist') and self.rng.randrange(100)<s.get('crit',14)
   amount=s['power']*self.rng.uniform(.91,1.09)
@@ -506,6 +577,8 @@ class Battle:
   if marked:amount*=1.42
   if crit:amount*=1.45
   if t.guard:amount*=.48
+  if t.behavior=='castle-king' and self._boss_state.get('crown_exposed'):
+   amount*=crown_dispatch.damage_multiplier(self,a,t)
   was_down=t.down
   damage=max(1,round(amount))
   if (self.story and a.enemy and not t.enemy and damage>=t.hp and not self._final_guard_used
@@ -517,6 +590,8 @@ class Battle:
   dmg=self._hurt(t,damage)
   tags=[name for cond,name in [(f=='weak','WEAK'),(f=='resist','RESIST'),(crit,'CRITICAL'),(marked,'TECHNICAL'),(t.guard,'GUARD')] if cond]
   self._say(f'{t.name} takes {dmg} damage'+(' ['+' · '.join(tags)+']' if tags else '')+('.' if t.alive else ' — down for the count!'))
+  if t.behavior=='castle-king' and self._boss_state.get('crown_used'):
+   crown_dispatch.hit(self,a,t)
   if t.status in ('freeze','sleep') and marked:t.status='';t.status_turns=0
   if s.get('status'):self._ail(t,s['status'],s.get('chance',.24))
   # A weakness KO counts only if the target was standing before the hit.
@@ -594,7 +669,7 @@ class Battle:
    result=enemy_step(self,a)
    if result is not None:return result
   if a.behavior=='reaper':return self._reaper_step(a)
-  living=[u for u in self.allies if u.alive]
+  living=[u for u in self.combat_allies if u.alive]
   friends=[u for u in self.enemies if u.alive]
   if not living:return False
   options=[]

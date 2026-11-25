@@ -4,7 +4,8 @@ Source: Persona 5 Royal English battle scripts 0358, 0359 and 0367
 (https://mysh.dev/tools/persona/5r/files/dataR.cpk/battle/event/script).
 Recorded gameplay: https://www.youtube.com/watch?v=_nkVqd-q5MU (5:02:09
 through 5:34:49). The terminal combines Maruki/Azathoth into one target,
-uses one affinity rotation and one partial regrowth, and converts the
+uses one affinity rotation and one partial regrowth coupled to the first
+Tyrant Stance, and converts the
 fused Adam Kadmon cutscene into a coordinated Guard and Joker command.
 Command bans and the human fistfight are not simulated.
 """
@@ -107,7 +108,7 @@ def intent(b):
         return 'ADAM KADMON / Wait for Oracle’s opening.'
     if _active(b, AZATHOTH):
         if b._boss_state.get('lab_charge'):
-            return 'AZATHOTH / Big attack incoming. Guard.'
+            return 'TYRANT STANCE / Guard before Tyrant Chaos.'
         return ('SHIELD TENDRIL / Topple or sever the protector.' if _protection(b) else
                 'AZATHOTH EXPOSED / Hit the core.')
     if _active(b, KADMON):
@@ -135,11 +136,30 @@ def use_special(b):
     return None
 
 
+def _can_respond(u):
+    return (u.alive and u.status not in ('sleep', 'freeze')
+            and not (u.status == 'burn' and u.hp <= max(1, u.max_hp // 12)))
+
+
+def _arm_tyrant(b):
+    st = b._boss_state
+    st['lab_charge'] = True
+    # The engine discards these from pending as their playable slots begin.
+    # Keep the warning active through an initiative change or a skipped turn.
+    st['pending'] = {u for u in b.allies if _can_respond(u)}
+    b._say('Azathoth assumes Tyrant Stance. ORACLE / Guard before Tyrant Chaos!')
+
+
 def _azathoth(b, a):
     st = b._boss_state
     count = st['lab_azathoth_turn'] = st.get('lab_azathoth_turn', 0) + 1
     arms = [u for u in b.enemies if u.behavior in TENDRILS]
-    if st.pop('lab_charge', False):
+    if st.get('lab_charge'):
+        if any(_can_respond(u) for u in st['pending']):
+            return False
+        del st['lab_charge']
+        del st['pending']
+        st['lab_repeat_at'] = count + 3  # Two ordinary actions before another Stance.
         return _sweep(b, a, 'Tyrant Chaos', 'Almighty', 42)
     # Keep this finite: one reinforcement and one reshuffle, not an
     # indefinitely healing boss if the party has little elemental coverage.
@@ -159,12 +179,10 @@ def _azathoth(b, a):
         b._say('ORACLE / The tendril signatures just changed. Previous affinity readings are stale.')
         if revived:
             b._say('Azathoth regrows severed tendrils once.')
-        # Real initiative can place a revived unit earlier or later in the
-        # fixed story round. Ending this turn preserves a usable opening.
+        _arm_tyrant(b)
         return False
-    if count % 4 == 3:
-        st['lab_charge'] = True
-        b._say('ORACLE / Azathoth is gathering power. Brace for the next strike.')
+    if st.get('lab_repeat_at', count + 1) <= count:
+        _arm_tyrant(b)
         return False
     return _sweep(b, a, 'Neuro Slash', 'Physical', 23)
 

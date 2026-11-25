@@ -1,6 +1,7 @@
 """Story-only adaptations of signature mechanics from Persona 5 Royal."""
 from importlib import import_module
 from battle_data import SKILLS
+import crown_dispatch
 
 # Extensions are explicitly registered only when their encounter data is wired.
 _EXTENSIONS = ('shido_boss','depths_boss','lab_boss')
@@ -33,19 +34,19 @@ def _active(battle, behavior):
     return next((u for u in battle.enemies if u.alive and u.behavior==behavior),None)
 
 def _push(b,a,action,element,power,*,group=False):
-    target=None if group else min(_living(b.allies),key=lambda u:u.hp/u.max_hp+.45*u.guard-.2*(u.status=='sleep'))
+    target=None if group else min(_living(b.combat_allies),key=lambda u:u.hp/u.max_hp+.45*u.guard-.2*(u.status=='sleep'))
     return b._execute(a,dict(kind='damage',element=element,power=power,
                             target='enemies' if group else 'enemy',accuracy=100,crit=0),
                       target,action)
 
 def _charge(b,text):
-    b._boss_state['pending']=set(_living(b.allies))
+    b._boss_state['pending']=set(_living(b.combat_allies))
     b._say(text)
 
 def _finish_charge(b,actor,name,element,power):
     pending=b._boss_state.get('pending')
     if pending is None:return None
-    if any(u.alive for u in pending):return False
+    if any(u.alive and not u.away for u in pending):return False
     del b._boss_state['pending']
     _push(b,actor,name,element,power,group=True)
     return False
@@ -89,6 +90,8 @@ def intent(b):
         if result:return result
     st=b._boss_state
     if _active(b,'castle-king') and 'pending' in st:return 'ROYAL SMASH incoming. Guard before the swing.'
+    crown=crown_dispatch.intent(b)
+    if crown:return crown
     if _active(b,'bank-piggytron'):
         if 'pending' in st:return 'MARCH OF THE PIGGY: Guard'+(' or 9: offer bait.' if special(b) else '.')
         return 'PIGGYTRON  /  Watch for Super VIP Form.'
@@ -160,7 +163,7 @@ def on_round(b):
     st=b._boss_state
     if _active(b,'space-worker') and not st.get('reissued') and b.round>=st.get('due',_shift_deadline(b)):
         for u in b.enemies:
-            u.hp=u.max_hp;u.down=False;u.status='';u.status_turns=0
+            u.hp=max(1,round(u.max_hp*b.config.get('spaceport_reissue_hp_pct',100)/100));u.down=False;u.status='';u.status_turns=0
         st['reissued']=True
         b._say('The production line reissues this squad. No further reissues for this rank.')
     if _active(b,'pyramid-wakaba') and not st.get('ballista_fired') and b.round>=3:
@@ -186,6 +189,7 @@ def enemy_step(b,a):
             king.hp=min(king.max_hp,king.hp+22);b._say('The Trophy heals Kamoshida.')
         return False
     if behavior=='castle-king':
+        if st.get('crown_stagger') and crown_dispatch.stagger(b):return False
         done=_finish_charge(b,a,'Royal Smash','Almighty',49)
         if done is not None:return done
         st['king_turn']=st.get('king_turn',0)+1

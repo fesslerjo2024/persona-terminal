@@ -79,7 +79,7 @@ class WeekendCoverage(unittest.TestCase):
         a=b.enemies[0]
         a.hp=1;b.round=3
         on_round(b)
-        self.assertEqual(a.hp,a.max_hp)
+        self.assertEqual(a.hp,round(a.max_hp*.70))
         a.hp=1
         on_round(b)
         self.assertEqual(a.hp,1)

@@ -9,8 +9,10 @@ import time
 from battle_data import TEAM
 from battle_ui import BattleUI, RED, GOLD, CYAN, WHITE, DIM, GREEN, ENTER, ESC
 import campaign_data as content
-from campaign_combat import build_stage, stage_grade
+from campaign_combat import build_stage, stage_grade, readiness, DEFENSE_ELEMENTS
 from campaign_state import Campaign, TestingCampaign, CampaignError
+from puzzle_ui import PyramidSwitchboard
+from cruiser_route import CruiserMouseRoute
 
 VAULT_WORDS=('RICH','REAP','HUGE','GOLD')
 VAULT_MAP=dict(zip('RICHEAPUGOLD','010293131841'))
@@ -45,7 +47,7 @@ class CampaignApp(BattleUI):
         self.notice='';self.cached_trials=None;self.story_view=None
         self.prologue=0;self.dial=0;self.code='';self.dial_notice=''
         self.grade=None;self.reward=None;self.error=None;self.finished=None
-        self.story_visited=False;self.restore_focus=False
+        self.story_visited=False;self.restore_focus=False;self.route_puzzle=None
 
     def put(self,y,x,t,color=WHITE,b=False,reverse=False):
         if 0<=y<self.h and 0<=x<self.w-1:
@@ -193,13 +195,55 @@ class CampaignApp(BattleUI):
 
     def brief(self):
         n=self.node;d=self.store.data
-        self.panel(self.label()+' / OPERATION BRIEF','◆ '+n['title'].upper(),
-                   ('ENTER DIALS' if self.dials_required() else 'ENTER DEPLOY')+'  ESC MAP  S SQUAD  V VELVET')
+        footer=('ENTER DIALS' if self.dials_required() else 'ENTER DEPLOY')+'  ESC MAP  S SQUAD  V VELVET'
+        if n['id']=='pyramid-guilt':footer+='  P SLABS'
+        elif n['id']=='laboratory-counseling':footer+='  P EXAM'
+        elif n['id']=='cruiser-industry':footer+='  P ROUTE'
+        footer+='  L KIT'
+        self.panel(self.label()+' / OPERATION BRIEF','◆ '+n['title'].upper(),footer)
         self.lines(6,3,(not self.testing and n.get('story_before')) or n.get('brief',''),limit=4)
         self.put(10,3,(f'WAVES: {len(n["waves"])}   /   SQUAD: '+', '.join(['Joker',*d['squad']]))[:self.w-6],CYAN,True)
         self.lines(12,3,n.get('preview') or 'Opening formation: '+', '.join(n['waves'][0]),limit=3,color=DIM)
         self.put(15,3,n.get('navigator','Mona').upper()+' INTEL  /  '+n.get('tactic',''),GOLD,True)
         self.lines(16,3,n.get('hint',''),limit=self.h-20,color=WHITE)
+
+    def draw_loadout(self):
+        self.panel(self.label()+' / FIELD KIT','◆ LOADOUT CHECK  /  '+self.node['title'].upper(),
+                   'S SQUAD  V VELVET ROOM  ESC BRIEFING')
+        self.lines(6,3,'Your equipped magic and support skills. No hidden Shadow affinities are shown.',limit=2,color=DIM)
+        rows=readiness(self.store,self.node)
+        labels={'heal':'heal','revive':'revive','cure':'cure','buff':'buff','debuff':'debuff',
+                'dekaja':'strip buffs','dekunda':'clear debuffs'}
+        for i,(name,(elements,opts)) in enumerate(rows.items()):
+            self.put(9+i*2,3,f'{name:<8}   '+(' / '.join(elements) or 'No elemental skill'),CYAN,True)
+            self.put(10+i*2,14,(' / '.join(labels[k] for k in opts) or 'Attack / Guard / shared items'),DIM)
+        covered={e for elements,_ in rows.values() for e in elements}
+        missing=' / '.join(e for e in DEFENSE_ELEMENTS if e not in covered) or 'None'
+        self.lines(18,3,'Missing elemental coverage: '+missing,limit=2,color=GOLD)
+        note=self.node.get('prep_hint') or 'Basic Attack, Gun and the shared item pouch remain available.'
+        self.lines(20,3,note,limit=2,color=WHITE)
+
+    def open_route_puzzle(self):
+        if self.node['id']=='pyramid-guilt':
+            self.route_puzzle=PyramidSwitchboard()
+        elif self.node['id']=='laboratory-counseling':
+            from lab_route import LabConsultation
+            self.route_puzzle=LabConsultation()
+        elif self.node['id']=='cruiser-industry':
+            self.route_puzzle=CruiserMouseRoute()
+        else:return
+        self.page='route-puzzle'
+        self.notice=''
+    def draw_route_puzzle(self):
+        self.route_puzzle.draw(self)
+    def key_route_puzzle(self,k):
+        result=self.route_puzzle.key(k)
+        if result is None:return
+        self.route_puzzle=None
+        if result=='back':
+            self.page='brief'
+        else:
+            self.stage(prep=self.node['id'] if result=='solved' else None)
 
     def dials_required(self):
         return (not self.testing and self.node['id']=='bank-vault' and self.dial<len(VAULT_WORDS)
@@ -228,8 +272,11 @@ class CampaignApp(BattleUI):
                 self.dial+=1;self.code='';self.dial_notice=''
                 if self.dial==4:self.page='brief';self.notice='DIALS OPEN  /  ENTER TO DEPLOY'
 
-    def open_squad(self,back):
-        self.back=back;self.edit=list(self.store.data['squad']);self.i=0;self.page='squad';self.notice=''
+    def open_squad(self,back,focus=None):
+        names=['Joker',*TEAM]
+        self.back=back;self.edit=list(self.store.data['squad'])
+        self.i=names.index(focus) if focus in names else 0
+        self.page='squad';self.notice=''
     def draw_squad(self):
         d=self.store.data;names=['Joker',*TEAM]
         self.panel('PALACE / SQUAD',f'◆ TEAM CONFIG  /  {len(self.edit)}/{d["squad_slots"]} ALLIES + JOKER',
@@ -247,9 +294,18 @@ class CampaignApp(BattleUI):
             self.lines(18,3,'Upgrades: '+(', '.join(d['team_skills'].get(n,[])) or 'none'),limit=2,color=DIM)
         else:self.put(17,3,'This Thief has not joined the campaign.',DIM)
 
-    def stage(self):
+    def stage(self,prep=None):
         try:b=build_stage(self.store,self.node['id'],self.seed)
         except (CampaignError,ValueError) as exc:self.notice='BLOCKED • '+str(exc);self.page='brief';return
+        if prep=='pyramid-guilt':
+            b.items['Hiranya']+=1
+            b._say('The unlocked cache supplies one extra Hiranya for this attempt.')
+        elif prep=='laboratory-counseling':
+            b.items['Soul Drop']+=1
+            b._say('The examination shortcut yields one extra Soul Drop for this attempt.')
+        elif prep=='cruiser-industry':
+            b.items['Medicine']+=1
+            b._say('The service route yields one extra Medicine for this attempt.')
         self.battle_init();self._b_battle=b
         self._b_personas=getattr(b,'personas',self._b_personas);self._b_screen='command'
         self._b_record_damage(getattr(b,'damage_events',()),time.monotonic())
@@ -275,7 +331,9 @@ class CampaignApp(BattleUI):
             self.lines(9,3,'This attempt ends. An unfinished fight does not change campaign progress.')
             return
         self.record()
-        if self.finished is not None and self._b_overlay is None and time.monotonic()-self.finished>=.68:
+        now=time.monotonic()
+        if (self.finished is not None and self._b_overlay is None
+            and now-self.finished>=.68 and not self._b_result_animation(now)):
             self.page='result';self.result();return
         self.battle_page()
         self.record()
@@ -289,7 +347,7 @@ class CampaignApp(BattleUI):
         else:title=(self.label()+' SECURED' if self.chapter_final() else 'OPERATION CLEARED') if win else 'SQUAD DEFEATED'
         footer=('ENTER RETRY SAVE  ESC MAP' if self.error else
                 'ENTER RETRY  L LOG  ESC MAP' if not win else
-                (f'↵ {self.label(self.ch+1)}' if self.new_chapter() else '↵ MAP')+'  R REPLAY  L LOG  S SQUAD  V CARDS  ESC MAP')
+                (f'↵ {self.label(self.ch+1)}' if self.new_chapter() else '↵ MAP')+'  R REPLAY  L LOG  S SQUAD  V VELVET  ESC MAP')
         self.panel('PALACE / DEBRIEF','◆ '+title+'  //  '+self.node['title'].upper(),footer)
         if win:
             self.put(7,3,('PRACTICE MEDAL  ' if self.testing else 'MEDAL  ')+str(self.grade),GOLD,True)
@@ -314,11 +372,13 @@ class CampaignApp(BattleUI):
         elif self.chapter_final():self.lines(self.h-5,3,self.chapters[self.ch].get('completion','Palace secured.'),limit=1,color=GREEN)
         else:self.put(self.h-5,3,'NEXT ROUTE  /  '+self.nodes()[self.near()]['title'].upper(),GREEN,True)
 
-    def open_velvet(self,back,compendium=False):
+    def open_velvet(self,back,compendium=False,focus=None):
         d=self.store.data
         self.back=back;self.mask_edit=list(d['loadout']);self.primary=d['primary']
         self.tab=int(compendium or not hasattr(self.store,'fusion_options'))
-        self.i=0;self.notice='';self.page='velvet'
+        names=self.velvet_names()
+        self.i=names.index(focus) if focus in names else 0
+        self.notice='';self.page='velvet'
     def velvet_names(self):
         if self.tab:return list(self.store.data['personas'])
         return [r['result'] for r in getattr(content,'FUSIONS',())]
@@ -471,10 +531,17 @@ class CampaignApp(BattleUI):
             if k==ESC:self.page='map';self.notice=''
             elif kl=='s':self.open_squad('brief')
             elif kl=='v':self.open_velvet('brief')
+            elif kl=='p':self.open_route_puzzle()
+            elif kl=='l':self.page='loadout';self.notice=''
             elif k in ENTER:
                 if self.dials_required():self.page='dials';self.notice=''
                 else:self.stage()
         elif page=='dials':self.key_dials(k)
+        elif page=='route-puzzle':self.key_route_puzzle(k)
+        elif page=='loadout':
+            if k==ESC:self.page='brief';self.notice=''
+            elif kl=='s':self.open_squad('loadout')
+            elif kl=='v':self.open_velvet('loadout')
         elif page=='squad':
             names=['Joker',*TEAM];d=self.store.data
             if k==ESC:self.page=self.back;self.notice=''
@@ -550,7 +617,7 @@ class CampaignApp(BattleUI):
             if self._b_overlay in ('resume','abandon') and k in ENTER:
                 if self._b_overlay=='abandon':self.stage()
                 else:self.page='map';self.notice='ATTEMPT ENDED  /  Campaign save unchanged'
-            elif self._b_battle.phase=='turn' or self._b_overlay is not None:
+            elif self._b_battle.phase=='turn' or self._b_overlay is not None or self._b_cut_in:
                 self.battle_key(k);self.record()
         elif page=='result':
             win=self._b_battle.phase=='win'
@@ -561,8 +628,10 @@ class CampaignApp(BattleUI):
                 else:self.leave_result()
             elif k in ENTER or (kl=='r' and not self.error):self.stage()
             elif kl=='l' and not self.error:self._b_overlay='log';self._b_log_scroll=0;self.page='result-log'
-            elif win and not self.error and kl=='s':self.open_squad('result')
-            elif win and not self.error and kl=='v':self.open_velvet('result',True)
+            elif win and not self.error and kl=='s':
+                self.open_squad('result',next(iter((self.reward or {}).get('teammates',())),None))
+            elif win and not self.error and kl=='v':
+                self.open_velvet('result',True,next(iter((self.reward or {}).get('personas',())),None))
         elif page=='result-log':
             self.battle_key(k)
             if self._b_overlay is None:self.page='result'
@@ -575,7 +644,7 @@ class CampaignApp(BattleUI):
 
     def run(self):
         draw={'title':self.title,'confirm':self.confirm,'prologue':self.story_panel,'transition':self.transition,
-              'map':self.draw_map,'drill':self.draw_drill,'brief':self.brief,'dials':self.draw_dials,'squad':self.draw_squad,
+              'map':self.draw_map,'drill':self.draw_drill,'brief':self.brief,'dials':self.draw_dials,'route-puzzle':self.draw_route_puzzle,'loadout':self.draw_loadout,'squad':self.draw_squad,
               'velvet':self.draw_velvet,'fusion':self.draw_fusion,'registered':self.draw_registered,
               'replace':self.draw_replace,'cards':self.draw_cards,'battle':self.draw_combat,'result':self.result,
               'result-log':self.battle_page,'trials':self.battle_page}

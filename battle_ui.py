@@ -1,5 +1,6 @@
 """Velvet Room battle interface. Simulation rules live in battle.py."""
 import curses as C
+from crown_dispatch import ACTION as CROWN_ACTION
 import textwrap
 import time
 
@@ -18,6 +19,7 @@ AFFINITY={
 }
 HP_FLASH=0.24
 HP_DRAIN=0.42
+HP_SETTLE=0.12  # Keep one clean frame at the new value before a result.
 MODIFIERS=(('attack','ATK'),('defense','DEF'),('agility','AGI'))
 
 
@@ -124,6 +126,7 @@ class BattleUI:
         self._b_hp_trails={}
         self._b_outgoing=None
         self._b_cut_in=None
+        self._b_cut_damage=None
 
     def _b_ensure(self):
         if not hasattr(self,'_b_battle'):
@@ -146,6 +149,7 @@ class BattleUI:
         self._b_record_damage(new.damage_events,time.monotonic())
         self._b_outgoing=None
         self._b_cut_in=None
+        self._b_cut_damage=None
         self._b_screen='command'
         self._b_persona_view=None
         self._b_index=0
@@ -221,13 +225,14 @@ class BattleUI:
 
     def _b_unit_draw(self,y,x,w,u,active=False,now=0,tall=False):
         states=[]
+        if getattr(u,'away',False):states.append('AWAY')
         if u.hp<=0:states.append('KO')
         if u.down and u.hp>0:states.append('DOWN')
         if u.guard and u.hp>0:states.append('GUARD')
         if u.status and u.hp>0:states.append(str(u.status).upper())
         text=f'{"▶" if active else " "} {u.name}'
         if states:text+='  ['+' / '.join(states)+']'
-        color=RED if u.hp<=0 else GOLD if u.down or u.status else CYAN if active else WHITE
+        color=RED if u.hp<=0 else GOLD if u.down or u.status or getattr(u,'away',False) else CYAN if active else WHITE
         mods=self._b_modifiers(u)
         if not tall and mods and len(text)+2+len(mods[0][0])>w:
             text=text[:max(2,w-2-len(mods[0][0]))]
@@ -267,6 +272,10 @@ class BattleUI:
         if extra:
             cat,label,desc=extra[0]
             rows.append((cat,label,desc,True))
+        crown=b.actions(CROWN_ACTION)
+        if crown:
+            cat,label,desc=crown[0]
+            rows.append((cat,label,desc,True))
         shows=b.actions('showtime')
         if shows:
             cat,label,desc=shows[0]
@@ -291,13 +300,19 @@ class BattleUI:
         self._b_put(y,3,label,CYAN,True)
         x=3+len(label)
         queue=list(b.upcoming_turns())
+        used=0
         for i,u in enumerate(queue):
             name=u.name
-            if x+len(name)+(3 if i else 0)>self.w-3:break
+            suffix=4 if i+1<len(queue) else 0
+            room=self.w-3-x-(3 if i else 0)-suffix
+            if len(name)>room and i:break
+            if room<2:break
+            if len(name)>room:name=name[:room-1]+'…'
             if i:self._b_put(y,x,' › ',DIM);x+=3
             self._b_put(y,x,name,RED if u.enemy else CYAN,i==0)
-            x+=len(name)
+            x+=len(name);used+=1
         if not queue:self._b_put(y,x,'—',DIM)
+        elif used<len(queue):self._b_put(y,x,' +'+str(len(queue)-used),DIM)
 
     def _b_affinity_row(self,y,x,w,enemy=None):
         step=4 if w>=44 else 2
@@ -310,7 +325,7 @@ class BattleUI:
     def _b_arena(self):
         b=self._b_battle
         now=time.monotonic()
-        self._b_hp_trails={u:a for u,a in self._b_hp_trails.items() if now-a[1]<HP_FLASH+HP_DRAIN}
+        self._b_hp_trails={u:a for u,a in self._b_hp_trails.items() if now-a[1]<HP_FLASH+HP_DRAIN+HP_SETTLE}
         if self._b_outgoing and now>=self._b_outgoing[2]:self._b_outgoing=None
         shown_wave,foes=(self._b_outgoing[:2] if self._b_outgoing else (b.wave,b.visible_enemies))
         active=b.actor
@@ -350,6 +365,8 @@ class BattleUI:
         for i,u in enumerate(b.allies):
             y=8+i*ally_step
             if double:self._b_unit_draw(y,3,split-5,u,u is active,now,tall)
+            elif getattr(u,'away',False):
+                self._b_put(y,3,f'  {u.name} [AWAY]',GOLD,width=split-11)
             else:
                 state=' KO' if not u.alive else ' ↓' if u.down else ' G' if u.guard else ''
                 label=f'{"▶" if u is active else " "} {u.name:<8} {u.hp:g}H/{u.sp:g}S'+state
@@ -478,27 +495,37 @@ class BattleUI:
             self.frame(getattr(b,'navigator','Oracle').upper()+' / BATTLE LOG','↑ ↓ / PGUP PGDN SCROLL   ESC BACK')
             self._b_log_draw(4,3,self.w-6,self.h-8,self._b_log_scroll)
         elif self._b_overlay=='status':
-            self.frame(getattr(b,'navigator','Oracle').upper()+' / FIELD STATUS','ESC OR I BACK   •   ↑ BUFF / ↓ DEBUFF   •   NUMBER = OWN TURNS LEFT')
+            self.frame(getattr(b,'navigator','Oracle').upper()+' / FIELD STATUS',
+                       'ESC / I BACK  •  ↑ BUFF  ↓ DEBUFF  •  TURNS LEFT')
             self._b_put(4,3,'PHANTOM THIEVES',CYAN,True)
             y=5
             foes=b.visible_enemies
+            compact=7+2*(len(b.allies)+len(foes))>self.h-3
             for roster in (b.allies,foes):
                 if roster is foes:
                     y+=1
                     self._b_put(y,3,'SHADOW FORMATION',RED,True)
                     y+=1
                 for u in roster:
-                    state='KO' if not u.alive else '  '.join(
+                    state='AWAY' if getattr(u,'away',False) else 'KO' if not u.alive else '  '.join(
                         item for item in ('DOWN' if u.down else '', 'GUARD' if u.guard else '',str(u.status).upper()) if item
                     )
-                    x=3
                     name=f'{u.name:<18}'
-                    self._b_put(y,x,name,WHITE,True,width=18)
                     flags=f'HP {u.hp}/{u.max_hp}  SP {u.sp}/{u.max_sp}'
-                    self._b_put(y,22,flags,DIM,width=self.w-25)
-                    if state:self._b_put(y+1,3,state,GOLD,width=18)
-                    if self._b_modifiers(u):self._b_mod_draw(y+1,22,self.w-25,u)
-                    y+=2
+                    if compact:
+                        self._b_put(y,3,u.name,WHITE,True,width=24)
+                        self._b_put(y,28,flags,DIM,width=self.w-31)
+                        sx=28+len(flags)+2
+                        if state:self._b_put(y,sx,state,GOLD,width=self.w-3-sx)
+                        bx=sx+len(state)+1 if state else sx
+                        self._b_mod_draw(y,bx,self.w-3-bx,u)
+                        y+=1
+                    else:
+                        self._b_put(y,3,name,WHITE,True,width=18)
+                        self._b_put(y,22,flags,DIM,width=self.w-25)
+                        if state:self._b_put(y+1,3,state,GOLD,width=18)
+                        if self._b_modifiers(u):self._b_mod_draw(y+1,22,self.w-25,u)
+                        y+=2
             if y<self.h-4:
                 p=getattr(b,'reaper_phase','')
                 q=getattr(b,'reaper_intent','')
@@ -545,9 +572,12 @@ class BattleUI:
 
     def battle_page(self):
         self._b_ensure()
+        now=time.monotonic()
+        if self._b_cut_in and now>=self._b_cut_in[2]:
+            self._b_release_cut(now)
         if self._b_overlay:
             self._b_over()
-        elif self._b_cut_in and time.monotonic()<self._b_cut_in[2]:
+        elif self._b_cut_in:
             title,subtitle,_=self._b_cut_in
             self.frame('PHANTOM LINK // CUT-IN','ENTER / ESC SKIP')
             self._b_rule(7,3,self.w-6)
@@ -565,6 +595,23 @@ class BattleUI:
             if now-start>=HP_FLASH+HP_DRAIN:prior=before
             self._b_hp_trails[unit]=(max(prior,before),now)
 
+    def _b_show_damage(self,events,old_wave,old_foes,now):
+        self._b_record_damage(events,now)
+        if self._b_battle.wave!=old_wave and any(foe in self._b_hp_trails for foe in old_foes):
+            self._b_outgoing=(old_wave,old_foes,now+HP_FLASH+HP_DRAIN+HP_SETTLE)
+
+    def _b_release_cut(self,now):
+        self._b_cut_in=None
+        if self._b_cut_damage is not None:
+            events,wave,foes=self._b_cut_damage
+            self._b_cut_damage=None
+            self._b_show_damage(events,wave,foes,now)
+
+    def _b_result_animation(self,now):
+        return (self._b_cut_in is not None
+                or any(u.hp<before and now-start<HP_FLASH+HP_DRAIN+HP_SETTLE
+                       for u,(before,start) in self._b_hp_trails.items()))
+
     def _b_apply(self,aid,target=None):
         b=self._b_battle
         old=b.actor
@@ -574,10 +621,11 @@ class BattleUI:
             self._b_message=error
             return
         now=time.monotonic()
-        self._b_record_damage(b.damage_events,now)
-        if b.cut_in:self._b_cut_in=(*b.cut_in,now+.62)
-        if b.wave!=old_wave and any(foe in self._b_hp_trails for foe in old_foes):
-            self._b_outgoing=(old_wave,old_foes,now+HP_FLASH+HP_DRAIN)
+        if b.cut_in:
+            self._b_cut_in=(*b.cut_in,now+.62)
+            self._b_cut_damage=(tuple(b.damage_events),old_wave,old_foes)
+        else:
+            self._b_show_damage(b.damage_events,old_wave,old_foes,now)
         self._b_screen='command'
         self._b_persona_view=None
         self._b_index=0 if self._b_battle.actor is not old else self._b_saved_index
@@ -606,9 +654,10 @@ class BattleUI:
     def battle_key(self,k):
         self._b_ensure()
         if self._b_cut_in:
-            visible=time.monotonic()<self._b_cut_in[2]
-            self._b_cut_in=None
-            if visible and (k in ENTER or k==ESC):return True
+            now=time.monotonic()
+            if now>=self._b_cut_in[2] or k in ENTER or k==ESC:
+                self._b_release_cut(now)
+            return True  # Do not also submit a command, even on the last cut-in frame.
         if self._b_outgoing and time.monotonic()<self._b_outgoing[2]:return True
         b=self._b_battle
         kl=k.lower() if isinstance(k,str) else k
@@ -703,7 +752,8 @@ class BattleUI:
             old_index=self._b_index
             self._b_index=self._b_nav(k,self._b_index,len(rows))
             if old_index!=self._b_index:self._b_message=''
-            choose=next((i for i,row in enumerate(rows) if row[0]=='showtime'),None) if kl=='t' else self._b_commit(k,self._b_index,len(rows))
+            shortcut={'t':'showtime','c':CROWN_ACTION}.get(kl)
+            choose=next((i for i,row in enumerate(rows) if row[0]==shortcut),None) if shortcut else self._b_commit(k,self._b_index,len(rows))
             if choose is None:return True
             cat,label,_,ok=rows[choose]
             self._b_index=self._b_saved_index=choose
@@ -711,7 +761,7 @@ class BattleUI:
                 self._b_message=b.command_block(cat)
                 return True
             self._b_message=''
-            if cat in ('attack','gun','guard','analyze','allout','story-special','showtime') and len(b.actions(cat))==1:
+            if cat in ('attack','gun','guard','analyze','allout','story-special','showtime',CROWN_ACTION) and len(b.actions(cat))==1:
                 aid,atitle,_=b.actions(cat)[0]
                 self._b_target_back='command'
                 self._b_target_back_index=choose

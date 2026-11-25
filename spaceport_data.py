@@ -121,11 +121,19 @@ NODES = (
          brief='Okumura protects himself with disposable units. Break their formation before he can call a new shift.',
          story_before='Mona turns down the offer. Okumura orders his workers to protect him, then shows Noir how readily he would discard even an image of his daughter.',
          story_after='The crew takes the Treasure and escapes. A masked intruder strikes Shadow Okumura after they leave. Later, Okumura collapses during his televised confession and public suspicion turns on the Thieves.',
-         hint='Clear each robot rank together by chaining Baton Passes. When the executive machine starts charging, or the cognitive copy is ordered to self-destruct, stop the attack or Guard.',
+         hint='Bring a full squad and test one worker to read its rank. Chain Baton Passes before the reissue. Use the maintenance break before the directors, and Guard charged attacks.',
+         prep_hint='Bring a mix of elements and save some SP for the later ranks. One clean probe reads that robot model.',
          preview='Five worker ranks, an executive unit, the cognitive copy, then the exposed ruler.',
          waves=[[name]*3 for name in _FLOOR_RANKS]+[
             ['Execurobo MDL-ED'],['Cognitive Haru'],['Shadow Okumura']],
          spaceport_clock=(2,2,2,2,2),
+         # The fast route keeps its original clock, first formations, and costs.
+         # The maintenance station helps only living members under these floors.
+         share_affinity_by_rank=True,spaceport_reissue_hp_pct=70,
+         # One ready Thief gets an opening in the remaining worker ranks and
+         # the executive phase. Rotate the same cycle; do not add a turn.
+         response_waves=(2,3,4,5,6),
+         spaceport_intermission={'wave':4,'hp_floor_pct':66,'sp_floor':17},
          items={'Soul Drop':3,'Snuff Soul':2},
          reward=dict(skill_cards=['Marakunda'],credits=475,joker_hp=9,joker_sp=7)),
 )

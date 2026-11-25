@@ -63,10 +63,10 @@ PERSONA_ADDITIONS = {
 
 
 def stage(id_, title, map_mark, brief, story_before, story_after, hint, waves,
-          reward=None, *, showtime_pairs=()):
+          reward=None, *, showtime_pairs=(), wave_response=False, prep_hint=''):
     return dict(id=id_, title=title, map_mark=map_mark, brief=brief, story_before=story_before,
                 story_after=story_after, hint=hint, waves=waves, reward=reward or {},
-                showtime_pairs=showtime_pairs)
+                showtime_pairs=showtime_pairs,wave_response=wave_response,prep_hint=prep_hint)
 
 
 CASTLE = (
@@ -93,7 +93,7 @@ CASTLE = (
     stage('throne-room', 'Kamoshida’s Throne Room', '05 KING', 'Deliver the calling card and take the crown.',
           'Shujin’s students have seen the card. In the castle, the king’s prize finally has a shape, but he will fight to keep it.',
           'The king falls and the crown is taken. Outside the Metaverse, Shujin has to hear what it spent so long ignoring.',
-          'Break the trophy to deny recovery. When the king winds up a smash, guard before it lands.',
+          'Break the trophy to stop recovery. Then use C to send a crown runner, or fight on. Guard before Royal Smash.',
           (('Kamoshida', 'Trophy of Obsession'),), dict(personas=('Jack Frost',), skill_cards=('Tarunda',), credits=1300, joker_hp=12, joker_sp=7)),
 )
 MUSEUM = (
@@ -128,7 +128,8 @@ MUSEUM = (
           'Different features feed on different hits. Test one target at a time, then use the colored copies to build an action chain.',
           (('Madarame’s Eyes', 'Madarame’s Nose', 'Madarame’s Mouth'),
            ('Madarame', 'Scarlet Copy', 'Cerulean Copy', 'Golden Copy', 'Verdant Copy')),
-          dict(personas=('Orthrus',), skill_cards=('Diarama',), credits=1900, joker_hp=12, joker_sp=7)),
+          dict(personas=('Orthrus',), skill_cards=('Diarama',), credits=1900, joker_hp=12, joker_sp=7),
+          prep_hint='The second formation hits hard with Physical. Shiki-Ouji can take the lead; bring elemental options for the copies.'),
 )
 
 GUN_WITH_THE_WIND = ('Mona', 'Panther')
@@ -150,19 +151,22 @@ BANK = (
           'Both security keys are recovered. The teller corridors open onto the underground vault.',
           'Keep track of what each keyholder resists instead of assuming the second will react like the first.',
           (('Fuu-Ki', 'Black Ooze'), ('Sui-Ki', 'Kin-Ki')), dict(personas=('Black Ooze',), skill_cards=('Freila',), credits=1500, joker_hp=8, joker_sp=5),
-          showtime_pairs=(GUN_WITH_THE_WIND,)),
+          showtime_pairs=(GUN_WITH_THE_WIND,),wave_response=True,
+          prep_hint='Look out for incoming Ice in the lower rooms. Equip an answer for Joker and keep healing ready.'),
     stage('bank-vault', 'Underground PIN Vault', '04 PIN', 'Follow torn notes through the rotating vault.',
           'Each ring takes a short word that must be converted into a PIN. The team gathers the torn notes for RICH, REAP, HUGE and GOLD before committing to the elevator.',
           'The last lock turns. The vault is reachable on a heist; the Treasure still needs a calling card to take shape.',
           'Take opponents in an order you can sustain. Preserve both a healing option and an alternative to weapon damage.',
           (('Black Ooze', 'Orobas'), ('Kin-Ki', 'Sui-Ki', 'Oni')), dict(skill_cards=('Rakunda',), credits=1700, joker_hp=8, joker_sp=6),
-          showtime_pairs=(GUN_WITH_THE_WIND,)),
+          showtime_pairs=(GUN_WITH_THE_WIND,),wave_response=True,
+          prep_hint='Look out for incoming Ice in the lower rooms. Equip an answer for Joker and keep healing ready.'),
     stage('bank-heist', 'Vault Breach', '05 CARD', 'Deliver the card and race down to the vault’s center.',
           'The card puts the moneylender on notice. The Thieves retrace the vault route now that the Treasure can be taken, with Skull and Queen ready to try a joint finisher.',
           'The vault team is through. Kaneshiro waits with a machine of his own and backup close at hand.',
           'Keep someone able to heal. A lucky opening does not make the machine or the counterattack harmless.',
           (('Kin-Ki', 'Fuu-Ki'), ('Orthrus', 'Black Ooze')), dict(skill_cards=('Mediarama',), credits=1850, joker_hp=8, joker_sp=6),
-          showtime_pairs=(GUN_WITH_THE_WIND, QUEEN_AND_SKULL)),
+          showtime_pairs=(GUN_WITH_THE_WIND, QUEEN_AND_SKULL),wave_response=True,
+          prep_hint='The counterattack can chain Physical hits. Keep a healing option and consider a Phys-resistant lead mask.'),
     stage('bank-boss', 'Kaneshiro’s Vault Center', '06 VAULT', 'Stop Piggytron and clear Kaneshiro’s hired muscle.',
           'Kaneshiro puts his faith in Piggytron and the protection bought with his money. Neither is going to stand aside while the team takes the Treasure.',
           'The machine stops and the hired muscle folds. Shibuya is out of this collector’s grip, but his warning about another Metaverse user stays with the team.',

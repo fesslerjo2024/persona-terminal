@@ -6,6 +6,8 @@ from types import SimpleNamespace
 import depths_boss as d
 from battle_engine import _unit
 from battle_data import TEAM
+from campaign_state import TestingCampaign
+from campaign_combat import build_stage
 
 
 class LaboratoryBattle:
@@ -135,6 +137,50 @@ class DepthsBossTest(unittest.TestCase):
         self.assertEqual(d.intent(other),'')
         self.assertIsNone(d.special(other))
         self.assertIsNone(d.enemy_step(other,SimpleNamespace(behavior='misc')))
+
+
+class DepthsCampaignTest(unittest.TestCase):
+    def test_actual_stage_transitions_visibility_and_specials(self):
+        for seed in range(8):
+            with self.subTest(seed=seed):
+                c=TestingCampaign()
+                c.equip_squad(('Mona','Queen','Noir'))
+                b=build_stage(c,'depths-yaldabaoth',seed=seed)
+                for _ in range(10):
+                    if b.actions('story-special'):break
+                    self.assertIsNone(b.act('guard'))
+                self.assertEqual(b.actions('story-special')[0][1],'Cut Supply Lines')
+                self.assertIsNone(b.act('story-special'))
+                self.assertFalse(b.actions('story-special'))
+                grail=b.enemies[0]
+                grail.hp=1
+                for _ in range(8):
+                    if b.wave==2:break
+                    self.assertIsNone(b.act('attack',grail))
+                self.assertEqual(b.wave,2)
+                body,*arms=b.enemies
+                self.assertTrue(all(u in b.order for u in arms))
+                self.assertNotIn('lines_cut',b._boss_state)
+                # There can be an enemy turn before the first available ally in
+                # wave 2; only already-manifested arms may be visible.
+                self.assertEqual(tuple(b.visible_enemies),
+                                 (body,*(a for a in arms if a.alive)))
+                for _ in range(12):
+                    if any(a.alive for a in arms):break
+                    self.assertIsNone(b.act('guard'))
+                self.assertTrue(any(a.alive for a in arms))
+                self.assertTrue(all(a in b.targets('attack') for a in arms if a.alive))
+                body.hp=1
+                for _ in range(8):
+                    if b.actions('story-special'):break
+                    self.assertIsNone(b.act('attack',body))
+                self.assertEqual(b.actions('story-special')[0][1],'Sinful Shell')
+                self.assertFalse(any(a.alive for a in arms))
+                self.assertIsNone(b.act('attack',body))
+                self.assertEqual(body.hp,1)
+                self.assertIsNone(b.act('story-special'))
+                self.assertEqual(b.phase,'win')
+                self.assertFalse(c.data['cleared'])
 
 
 if __name__=='__main__': unittest.main()
