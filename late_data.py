@@ -10,6 +10,9 @@ and original recorded play at https://bai-gaming.com/guides/persona5royal/ .
 from copy import deepcopy
 from battle_data import shadow
 from shuffle_data import SHUFFLE_ENEMIES
+from shido_boss import FORM_HP
+from depths_boss import ENEMY_ADDITIONS as DEPTHS_ENEMIES, DEPTHS_FINAL_WAVES
+from lab_boss import ENEMY_ADDITIONS as LAB_ENEMIES, WAVES as LAB_FINAL_WAVES
 
 _NORMALS = ('Power','Ose','Rangda','Skadi','Narcissus','Dakini','Garuda',
             'Cerberus','Kali','Hanuman','Melchizedek','Moloch','Abaddon',
@@ -50,6 +53,13 @@ for name,hp,skills in (
 ):
     _boss(name,hp,skills)
 
+
+ENEMY_ADDITIONS['Sae Leviathan']['behavior'] = 'casino-sae'
+for _name,_tag in zip(('Beast of Human Sacrifice', 'Wings of Human Sacrifice',
+                       'Tomb of Human Sacrifice', 'Shido Samael', 'Shido Final Duel'),FORM_HP):
+    ENEMY_ADDITIONS[_name].update(behavior=_tag,hp=FORM_HP[_tag])
+ENEMY_ADDITIONS.update(DEPTHS_ENEMIES)
+ENEMY_ADDITIONS.update(LAB_ENEMIES)
 
 # Six regular Royal pairs are available by the early Casino hideout scene.
 # Queen/Noir unlock after Casino infiltration begins. Joker/Crow only in Lab
@@ -108,10 +118,11 @@ CASINO = (
     [['Skadi','Rangda']],gate=dict(requires='high_limit_trials_complete'),
     mechanic=dict(kind='narrated_coin_loophole')),
  _n('casino-heist','Leviathan and the Escape','HEIST',
-    'On the planned heist, Sae becomes Leviathan. Her roulette is another rigged game. This terminal encounter compresses its exposure into a conventional boss battle.',
+    'Sae insists on one more round at a table she controls. Watch the wheel, expose the rigging, and be ready to fight Leviathan when the rules change.',
     'Sae is defeated. Joker draws the pursuit and is captured; the interrogation and the team\'s deception lead into the hunt for Shido. This is not a routine treasure theft ending.',
     [['Sae Leviathan']],gate=dict(requires='planned_calling_card_and_heist'),
-    mechanic=dict(kind='adapted_boss',not_implemented=['roulette','special_assignment'])),
+    hint='The locked wheel cannot be damaged. Watch the first spin, then use 9 to expose its trick.',
+    mechanic=dict(kind='roulette_boss')),
 )
 CRUISER = (
  _n('cruiser-guests','A Ship for the Chosen','VIP',
@@ -136,7 +147,8 @@ CRUISER = (
     'Shido abandons his monument and overwhelms the others, isolating Joker for the final exchange.',
     [['Beast of Human Sacrifice'],['Wings of Human Sacrifice'],['Tomb of Human Sacrifice'],['Shido Samael']],
     forbidden_team=['Crow'],gate=dict(requires='public_calling_card'),
-    mechanic=dict(kind='adapted_sequential_phases')),
+    hint='Each form fights differently. Watch for the charge and test new elements when hits are resisted.',
+    mechanic=dict(kind='distinct_shido_forms')),
  _n('cruiser-duel','Joker Stands Alone','DUEL',
     'Shido has forced Joker into a one-on-one finish. The final duel is separated into its own operation for terminal pacing.',
     'Shido falls. His attempt to collapse the Palace forces an escape. His confession still does not free society from its desire to surrender responsibility.',
@@ -168,10 +180,11 @@ DEPTHS = (
     'The path reaches the temple. The Grail no longer has a prison full of willing supporters to conceal its nature.',
     [['Gabriel'],['Michael']],forbidden_team=['Crow','Violet']),
  _n('depths-yaldabaoth','The God of Control','FREEDOM',
-    'The Grail reveals Yaldabaoth. This adaptation uses two combat waves; the original multi-arm battle and final public rally are represented in the story.',
+    'The Grail draws strength through its supply lines. Sever them, then fight its true form and the arms it manifests.',
     'The public rallies behind the Thieves. Joker manifests Satanael for the decisive shot, ending the god of control. The Royal branch continues only if its earlier story conditions were met.',
-    [['Holy Grail Unbound'],['Yaldabaoth']],forbidden_team=['Crow','Violet'],
-    mechanic=dict(kind='adapted_boss',not_implemented=['separate_arms','sin_effects','Satanael_finisher'])),
+    DEPTHS_FINAL_WAVES,forbidden_team=['Crow','Violet'],
+    hint='Use 9 when the supply lines are exposed. Suppress arms before Divine Apex, or Guard.',
+    mechanic=dict(kind='grail_arms_and_finisher')),
 )
 LABORATORY = (
  _n('laboratory-reality','A World Without Loss','TRUTH',
@@ -198,11 +211,12 @@ LABORATORY = (
     [['Fafnir'],['Baal']],gate=dict(requires='research_and_consultations'),
     mechanic=dict(kind='narrated_color_bridges')),
  _n('laboratory-choice','Our Own Tomorrow','CHOICE',
-    'Maruki and Azathoth defend the imposed reality. This terminal version compresses the changing tendrils and action restrictions into conventional waves, followed by Adam Kadmon.',
+    'Maruki has a tendril to protect, another to strengthen, and a third to heal. Down the shield and hit Azathoth before Maruki can repair his defenses.',
     'The Thieves create Joker\'s opening against Adam Kadmon. Maruki and Joker\'s final human struggle ends the Palace; they return to an uncertain future they can choose for themselves.',
-    [['Azathoth Tendril','Azathoth Tendril'],['Maruki Azathoth'],['Adam Kadmon']],
+    LAB_FINAL_WAVES,
     gate=dict(requires='route_secured_and_final_offer_rejected_and_calling_card'),
-    mechanic=dict(kind='adapted_boss',not_implemented=['changing_tendril_affinities','action_bans','scripted_guard_finish','human_fistfight'])),
+    hint='Change attacks after the tendrils rotate. Guard together when Oracle signals Full Force.',
+    mechanic=dict(kind='azathoth_tendrils_and_kadmon',not_implemented=['action_bans','human_fistfight'])),
 )
 
 CHAPTERS = tuple(dict(id=id,title=title,brief=brief,completion=completion,nodes=nodes)

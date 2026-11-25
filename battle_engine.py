@@ -72,7 +72,8 @@ class Battle:
   self.waves=config['waves']
   self.enemy_data=ENEMIES if enemy_data is None else enemy_data
   self._story_intent='';self._boss_state={}
-  self._support_used=False
+  self._support_used=False;self._final_guard_used=False;self._ufo_used=False
+  self.cut_in=None
   if config.get('shuffle_count'):
    from shuffle_data import SHUFFLE_ENEMIES
    self.enemy_data=SHUFFLE_ENEMIES
@@ -82,6 +83,12 @@ class Battle:
   self.round=1;self.cursor=-1;self.actor=None
   self._say(f'Trial entered: {encounter} // {difficulty}.')
   self._spawn();self._advance()
+ @property
+ def visible_enemies(self):
+  if not self.story:return self.enemies
+  from weekend_bosses import hidden_enemies
+  hidden=hidden_enemies(self)
+  return [u for u in self.enemies if u not in hidden]
  @property
  def story_intent(self):
   if not self.story:return ''
@@ -148,7 +155,10 @@ class Battle:
   self._boss_state={};self._story_intent='';self._showtime=None
   for u in self.allies:
    u.ammo=u.max_ammo;u.down=False;u.guard=False
-  self._say(f'Wave {self.wave}/{self.wave_count}: '+', '.join(u.name for u in self.enemies)+'. Ammo refilled.')
+  if self.story:
+   from weekend_bosses import on_spawn
+   on_spawn(self)
+  self._say(f'Wave {self.wave}/{self.wave_count}: '+', '.join(u.name for u in self.visible_enemies)+'. Ammo refilled.')
  @property
  def allout_fighters(self):
   return sum(u.alive and not u.down for u in self.allies)
@@ -163,6 +173,9 @@ class Battle:
  def _state(self):
   if not self.allies[0].alive:
    self.phase='loss';self._say('Joker fell. Trial failed.');return True
+  if self.story:
+   from weekend_bosses import before_state
+   before_state(self)
   if not any(u.alive for u in self.enemies):
    if self.wave==self.wave_count:
     self.phase='win';self._say('Trial cleared. The Velvet Room awaits.');return True
@@ -331,7 +344,7 @@ class Battle:
          'Remove stat buffs' if k=='dekaja' else 'Remove stat debuffs' if k=='dekunda' else k.title())
   return ' • '.join([cost,label,tp]+([f'power {p}'] if p else []))
  def act(self,id,target=None,*,persona=None):
-  self.damage_events.clear()
+  self.damage_events.clear();self.cut_in=None
   error=self._act(id,target,persona)
   self.last_error=error
   return error
@@ -348,6 +361,9 @@ class Battle:
   if id=='showtime':
    if not self._showtime or target not in self.targets(id):return 'No Showtime is available for that target.'
    title='SHOWTIME / '+' × '.join(self._showtime)
+   if self.story:
+    from cutins import showtime
+    self.cut_in=showtime(self._showtime)
    self._showtime_spent=True;self._showtime=None
    self._execute(a,self._spec(id),target,title)
    if not self._state() or self.phase=='turn':self._advance()
@@ -371,6 +387,14 @@ class Battle:
   if id=='allout':
    if not self.hold_up:return self.command_block('allout')
    damage=self.allout_damage
+   if self.story:
+    from cutins import all_out
+    enemies=[t for t in self.enemies if t.alive]
+    ufo=('ufo' in self.config.get('oracle_features',()) and not self._ufo_used and
+         len(enemies)>=2 and all(t.hp<=damage for t in enemies))
+    if ufo:self._ufo_used=True
+    self.cut_in=all_out(a.name,ufo)
+    self._say(self.cut_in[0]+'.')
    self._say(f'All-Out Attack! {self.allout_fighters} standing • {damage} damage per Shadow.')
    for t in self.enemies:
     if t.alive:self._hurt(t,damage)
@@ -483,7 +507,14 @@ class Battle:
   if crit:amount*=1.45
   if t.guard:amount*=.48
   was_down=t.down
-  dmg=self._hurt(t,max(1,round(amount)))
+  damage=max(1,round(amount))
+  if (self.story and a.enemy and not t.enemy and damage>=t.hp and not self._final_guard_used
+      and 'guard' in self.config.get('oracle_features',())):
+   self._final_guard_used=True
+   self._say(f'ORACLE / FINAL GUARD: Necronomicon shields {t.name} from a fatal hit.')
+   if self.cut_in is None:self.cut_in=('ORACLE // FINAL GUARD',f'Fatal hit blocked for {t.name}.')
+   return False
+  dmg=self._hurt(t,damage)
   tags=[name for cond,name in [(f=='weak','WEAK'),(f=='resist','RESIST'),(crit,'CRITICAL'),(marked,'TECHNICAL'),(t.guard,'GUARD')] if cond]
   self._say(f'{t.name} takes {dmg} damage'+(' ['+' · '.join(tags)+']' if tags else '')+('.' if t.alive else ' — down for the count!'))
   if t.status in ('freeze','sleep') and marked:t.status='';t.status_turns=0

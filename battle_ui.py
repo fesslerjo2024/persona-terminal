@@ -123,6 +123,7 @@ class BattleUI:
         self._b_log_scroll=0
         self._b_hp_trails={}
         self._b_outgoing=None
+        self._b_cut_in=None
 
     def _b_ensure(self):
         if not hasattr(self,'_b_battle'):
@@ -144,6 +145,7 @@ class BattleUI:
         self._b_hp_trails.clear()
         self._b_record_damage(new.damage_events,time.monotonic())
         self._b_outgoing=None
+        self._b_cut_in=None
         self._b_screen='command'
         self._b_persona_view=None
         self._b_index=0
@@ -310,7 +312,7 @@ class BattleUI:
         now=time.monotonic()
         self._b_hp_trails={u:a for u,a in self._b_hp_trails.items() if now-a[1]<HP_FLASH+HP_DRAIN}
         if self._b_outgoing and now>=self._b_outgoing[2]:self._b_outgoing=None
-        shown_wave,foes=(self._b_outgoing[:2] if self._b_outgoing else (b.wave,b.enemies))
+        shown_wave,foes=(self._b_outgoing[:2] if self._b_outgoing else (b.wave,b.visible_enemies))
         active=b.actor
         wide=self.w>=91
         split=max(32,(self.w-1)//2)
@@ -343,7 +345,8 @@ class BattleUI:
         double=self.h>=31
         tall=wide and self.h>=37
         ally_step=3 if tall else 2 if double else 1
-        enemy_step=3 if tall else 2
+        compact_foes=self.h<29 and len(foes)>4
+        enemy_step=1 if compact_foes else 3 if tall else 2
         for i,u in enumerate(b.allies):
             y=8+i*ally_step
             if double:self._b_unit_draw(y,3,split-5,u,u is active,now,tall)
@@ -371,12 +374,17 @@ class BattleUI:
             name=u.name[:max(1,right-bars-1-len(hp)-len(prefix))]
             self._b_put(y,split,prefix+name+hp,RED if not u.alive else GOLD if u.down else CYAN if u is picked_target else WHITE,u is picked_target,width=right)
             self._b_hp_draw(y,bar_x,u,bars,now)
+            if compact_foes:continue
             self._b_affinity_row(y+1,split,right,u)
             if tall:self._b_mod_draw(y+2,split+2,right-2,u)
             else:
                 affinity_width=(4 if right>=44 else 2)*len(ELEMENTS)
                 self._b_mod_draw(y+1,split+affinity_width+1,right-affinity_width-1,u)
         top=9+max(len(b.allies)*ally_step,len(foes)*enemy_step)
+        if compact_foes:
+            self._b_affinity_row(top-1,split,right,picked_target or next((u for u in foes if u.alive),foes[0]))
+            top+=1
+
         if self._b_outgoing:
             self._b_put(top,3,'WAVE CLEARED  /  NEXT FORMATION INCOMING',GOLD,True,width=self.w-6)
             return
@@ -473,8 +481,9 @@ class BattleUI:
             self.frame(getattr(b,'navigator','Oracle').upper()+' / FIELD STATUS','ESC OR I BACK   •   ↑ BUFF / ↓ DEBUFF   •   NUMBER = OWN TURNS LEFT')
             self._b_put(4,3,'PHANTOM THIEVES',CYAN,True)
             y=5
-            for roster in (b.allies,b.enemies):
-                if roster is b.enemies:
+            foes=b.visible_enemies
+            for roster in (b.allies,foes):
+                if roster is foes:
                     y+=1
                     self._b_put(y,3,'SHADOW FORMATION',RED,True)
                     y+=1
@@ -538,6 +547,13 @@ class BattleUI:
         self._b_ensure()
         if self._b_overlay:
             self._b_over()
+        elif self._b_cut_in and time.monotonic()<self._b_cut_in[2]:
+            title,subtitle,_=self._b_cut_in
+            self.frame('PHANTOM LINK // CUT-IN','ENTER / ESC SKIP')
+            self._b_rule(7,3,self.w-6)
+            self.mid(9,title,RED,True)
+            self.mid(12,subtitle,WHITE)
+            self._b_rule(15,3,self.w-6)
         elif self._b_screen=='setup':
             self._b_setup_draw()
         else:
@@ -552,13 +568,14 @@ class BattleUI:
     def _b_apply(self,aid,target=None):
         b=self._b_battle
         old=b.actor
-        old_wave,old_foes=b.wave,b.enemies
+        old_wave,old_foes=b.wave,b.visible_enemies
         error=b.act(aid,target,persona=self._b_persona_view if self._b_category=='skills' else None)
         if error:
             self._b_message=error
             return
         now=time.monotonic()
         self._b_record_damage(b.damage_events,now)
+        if b.cut_in:self._b_cut_in=(*b.cut_in,now+.62)
         if b.wave!=old_wave and any(foe in self._b_hp_trails for foe in old_foes):
             self._b_outgoing=(old_wave,old_foes,now+HP_FLASH+HP_DRAIN)
         self._b_screen='command'
@@ -588,6 +605,10 @@ class BattleUI:
 
     def battle_key(self,k):
         self._b_ensure()
+        if self._b_cut_in:
+            visible=time.monotonic()<self._b_cut_in[2]
+            self._b_cut_in=None
+            if visible and (k in ENTER or k==ESC):return True
         if self._b_outgoing and time.monotonic()<self._b_outgoing[2]:return True
         b=self._b_battle
         kl=k.lower() if isinstance(k,str) else k
