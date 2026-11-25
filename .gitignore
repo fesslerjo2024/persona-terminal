@@ -14,6 +14,8 @@ dist/
 *-save*.json*
 *_save*.json*
 *save*.json
+/p3-test.json
+/p5-test.json
 *.sav
 *.save
 *.bak

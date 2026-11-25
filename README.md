@@ -2,6 +2,8 @@
 
 An offline Persona terminal suite with the Persona 3 base-game story and the Persona 5 campaign. See [Information Baseline](INFORMATION_BASELINE.md) for screen, data, and file naming rules.
 
+[Windows setup](WINDOWS.md) · [Recovered project history](HISTORY.md)
+
 Run from the extracted directory with Python and a curses terminal:
 
     python3 campaign.py
