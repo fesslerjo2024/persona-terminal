@@ -9,7 +9,7 @@ from campaign_state import Campaign, CampaignError, TestingCampaign
 from weekend_bosses import enemy_step, on_round
 
 
-class WeekendCoverage(unittest.TestCase):
+class CampaignProgressTests(unittest.TestCase):
     def test_all_routes_have_unique_id_and_legal_references(self):
         self.assertEqual(tuple(c['id'] for c in CHAPTERS),
                          ('castle','museum','bank','pyramid','spaceport','casino','cruiser','depths','laboratory'))

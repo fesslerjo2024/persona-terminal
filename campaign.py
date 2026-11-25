@@ -11,8 +11,8 @@ from reel_palette import install as install_scene_palette
 from battle_data import TEAM
 from battle_ui import BattleUI, RED, GOLD, CYAN, WHITE, DIM, GREEN, ENTER, ESC
 import campaign_data as content
-from campaign_combat import build_stage, stage_grade
-from campaign_state import Campaign, TestingCampaign, CampaignError
+from campaign_combat import build_stage, stage_grade, stage_party
+from campaign_state import DEFAULT_SAVE, Campaign, TestingCampaign, CampaignError
 
 VAULT_WORDS=('RICH','REAP','HUGE','GOLD')
 VAULT_MAP=dict(zip('RICHEAPUGOLD','010293131841'))
@@ -48,7 +48,7 @@ class CampaignApp(BattleUI):
         self.prologue=0;self.dial=0;self.code='';self.dial_notice=''
         self.grade=None;self.reward=None;self.error=None;self.finished=None
         self.story_visited=False;self.restore_focus=False
-        self.gallery=None
+        self.gallery=None;self.gallery_return='title'
 
     def put(self,y,x,t,color=WHITE,b=False,reverse=False):
         if 0<=y<self.h and 0<=x<self.w-1:
@@ -57,8 +57,6 @@ class CampaignApp(BattleUI):
     def mid(self,y,t,color=WHITE,b=False):
         self.put(y,max(0,(self.w-len(t))//2),t,color,b)
     def frame(self,title,footer):
-        if self.testing:
-            self.put(0,2,'SESSION ONLY  /  STORY SAVE UNCHANGED',DIM)
         self.put(1,2,'◆ TESTING MODE' if self.testing else '◆ PHANTOM CAMPAIGN',GOLD if self.testing else RED,True)
         self.put(1,max(21,self.w-len(title)-3),title,CYAN,True)
         for y in (2,self.h-3):self.put(y,2,'━'*(self.w-4),RED)
@@ -91,22 +89,17 @@ class CampaignApp(BattleUI):
         return True,result
 
     def title(self):
-        self.frame('TOKYO / OFFLINE LINK','↑↓ SELECT  ENTER OPEN  1–5 JUMP')
-        self.mid(5,'—  M E T A V E R S E   L I N K  —',RED,True)
-        self.mid(7,'P H A N T O M   C A M P A I G N',WHITE,True)
-        self.mid(9,'◆  PALACE INFILTRATION  /  FIGHT-ONLY  ◆',GOLD)
+        self.frame('','↑↓ SELECT  ↵ OPEN')
         ready=self.story.status=='ready'
-        self._b_list([('CONTINUE','',ready),('NEW GAME','',True),('TESTING MODE','',True),('ANIMATION GALLERY','',True),('QUIT','',True)],11,5,self.w-10,5,self.i)
-        tips=('Continue from the campaign autosave.' if ready else 'No readable story save in this slot.',
-              'Begin at the Castle; existing saves are backed up.',
-              'All built battles, no story progress or save changes.',
-              'Preview every cut-in and battle effect without a fight.','Close the terminal.')
-        self.mid(17,tips[self.i],DIM)
+        self._b_list([('CONTINUE','',ready),('NEW GAME','',True),('TESTING MODE','',True),
+                      ('ANIMATION GALLERY','',True),('QUIT','',True)],8,5,self.w-10,5,self.i)
+        if self.i==2:self.mid(15,'Practice only. Story progress is not saved.',DIM)
+        elif self.i==0 and not ready:self.mid(15,'No readable campaign save.',DIM)
         if self.notice:self.put(self.h-4,3,self.notice[:self.w-6],GOLD)
 
     def confirm(self):
         self.panel('SYSTEM / NEW GAME','START A NEW CAMPAIGN?','N CONFIRM NEW GAME  ESC KEEP CURRENT SAVE')
-        self.lines(8,3,'Your old save will be copied to a separate backup before the new one replaces it. Escape leaves the current file untouched.')
+        self.lines(8,3,'Your old save will be copied to a separate backup before the new one replaces it.')
 
     def story_panel(self):
         title,body=STORY[self.prologue]
@@ -122,26 +115,25 @@ class CampaignApp(BattleUI):
                     ('Agi  Fire','Dazzler  Ailment','Rakunda  DEF down'))[self.drill_mask]
         return DRILL[self.drill-1][2]
     def draw_drill(self):
-        self.frame('MONA / FIELD DRILL','↑↓ PICK  ENTER CONFIRM  ESC SKIP')
         if self.drill in (0,len(DRILL)+1):
             start=self.drill==0
-            self.mid(6,'◈ TRAINING LINK ◈' if start else '◈ FIELD DRILL CLEARED ◈',GREEN,True)
-            self.lines(9,3,'Try a short simulation. No progress, supplies or SP can be lost here.' if start else
-                       'A weakness gave One More. Baton Pass chained into an All-Out Attack. Guard reduced the practice hit.')
-            self.lines(14,3,'Enter to begin. These keys match the real battle menu.' if start else
-                       'Enter to open the map. H from the map reruns training. I checks status and L opens the battle log.',color=DIM)
+            self.frame('FIELD DRILL','↵ BEGIN  ESC SKIP' if start else '↵ MAP')
+            self.mid(6,'PRACTICE BATTLE' if start else 'DRILL COMPLETE',GREEN,True)
+            if start:self.lines(9,3,'Learn weaknesses, Baton Pass, and All-Out Attacks without risking your squad.')
             return
+        guide='←→ PERSONA  ' if self.drill==2 else ''
+        self.frame('FIELD DRILL',guide+'↑↓ PICK  ↵ CONFIRM  ESC SKIP')
         name,hint,_,_=DRILL[self.drill-1]
         self.put(4,3,f'{self.drill:02}/{len(DRILL)}  /  {name}',GOLD,True)
         self.lines(6,3,hint,limit=2)
-        if self.drill==2:self.put(9,3,'←→ MASK  [ '+('Arsène','Pixie',"Jack-o’-Lantern")[self.drill_mask]+' ]',CYAN,True)
+        if self.drill==2:self.put(9,3,'[ '+('Arsène','Pixie',"Jack-o’-Lantern")[self.drill_mask]+' ]',CYAN,True)
         for i,name in enumerate(self.drill_rows()):
             x=3+(i//4)*((self.w-6)//2);y=11+i%4
             self.put(y,x,f'{"▶" if i==self.drill_pick else " "} {i+1} {name}',CYAN if i==self.drill_pick else WHITE)
         self.lines(19,3,self.drill_feedback,limit=2,color=GOLD)
     def drill_key(self,k):
         if k==ESC or (self.drill==len(DRILL)+1 and k in (*ENTER,' ')):
-            self.page='map';self.notice='FIELD DRILL SKIPPED' if k==ESC else 'FIELD DRILL COMPLETE';return
+            self.page='map';self.notice='';return
         if self.drill==0:
             if k in (*ENTER,' '):self.drill=1
             return
@@ -168,41 +160,40 @@ class CampaignApp(BattleUI):
     def draw_map(self):
         nodes=self.nodes();d=self.store.data;known=d['cleared']
         complete=sum(n['id'] in known for n in nodes)
-        title=f'ALL {len(nodes)} BATTLES OPEN' if self.testing else f'{complete}/{len(nodes)} CLEARED'
-        self.panel(f'PALACE / {self.label()} MAP',f'◆ {self.chapters[self.ch]["title"].upper()}  /  {title}',
-                   '←→ PALACE  ↑↓ PICK  ↵ BRIEF  S SQUAD  V VELVET  T  ESC')
+        progress='' if self.testing else f'  /  {complete}/{len(nodes)} CLEARED'
+        self.panel('PALACE MAP',self.chapters[self.ch]['title'].upper()+progress,
+                   '←→ PALACE  ↑↓ PICK  ↵ BRIEF  S SQUAD  V VELVET')
+        self.mid(self.h-1,('G ANIMATION GALLERY  T CLASSIC TRIALS' if self.testing
+                           else 'H HELP  T CLASSIC TRIALS')+'  ESC TITLE',DIM)
         tabs='  /  '.join(f'[ {self.label(i)} ]' if i==self.ch else self.label(i) for i in range(self.opened()))
         if len(tabs)>self.w-6:
             count=self.opened()
             tabs=f'‹ {self.label((self.ch-1)%count)}  [ {self.label()} ]  {self.label((self.ch+1)%count)} ›  {self.ch+1}/{count}'
         self.put(5,3,tabs,CYAN,True)
-        self.put(6,3,'◆ Available  •  T Classic Trials' if self.testing else '✓ Clear  ◆ Available  ▣ Locked  •  H Help  T Trials',DIM)
+        if not self.testing:self.put(6,3,'✓ Clear  ◆ Available  ▣ Locked',DIM)
         wide=self.w>=92;split=self.w//2
         for idx,n in enumerate(nodes):
             ok=self.store.can_play(n['id']);done=not self.testing and n['id'] in known
-            mark='✓' if done else '◆' if ok else '▣'
+            mark='' if self.testing else '✓ ' if done else '◆ ' if ok else '▣ '
             rank=f'  [{known[n["id"]]}]' if done and known.get(n['id']) else ''
             y=8+idx*(2 if wide else 1);width=split-5 if wide else self.w-6
-            row=f'{"▶" if idx==self.pick else " "}  {idx+1:02}  {mark}  {n["title"]}{rank}'
+            row=f'{"▶" if idx==self.pick else " "}  {idx+1:02}  {mark}{n["title"]}{rank}'
             self.put(y,3,row[:width].ljust(width),GREEN if done else CYAN if ok else DIM,idx==self.pick,idx==self.pick)
-            if wide:self.put(y+1,11,n.get('map_mark',''),DIM)
         x,y=(split+2,8) if wide else (3,15);n=nodes[self.pick];width=self.w-x-3
-        self.put(y,x,n['title'].upper()[:width],CYAN,True)
-        self.lines(y+2,x,n.get('brief',''),width,3)
         if self.store.can_play(n['id']):
-            self.put(y+5,x,f'{len(n["waves"])} wave(s)  /  Enter for briefing.',DIM)
+            self.lines(y,x,n.get('brief',''),width,4)
         else:
             prior=nodes[max(0,self.pick-1)]['title']
-            self.put(y+5,x,('LOCKED • Clear '+prior+' first.')[:width],GOLD)
+            self.lines(y,x,'Clear '+prior+' first.',width,2,color=GOLD)
 
     def brief(self):
-        n=self.node;d=self.store.data
+        n=self.node
         self.panel(self.label()+' / OPERATION BRIEF','◆ '+n['title'].upper(),
                    ('ENTER DIALS' if self.dials_required() else 'ENTER DEPLOY')+'  ESC MAP  S SQUAD  V VELVET')
         self.lines(6,3,(not self.testing and n.get('story_before')) or n.get('brief',''),limit=4)
-        self.put(10,3,(f'WAVES: {len(n["waves"])}   /   SQUAD: '+', '.join(['Joker',*d['squad']]))[:self.w-6],CYAN,True)
+        self.put(10,3,(f'WAVES: {len(n["waves"])}   /   SQUAD: '+', '.join(['Joker',*stage_party(self.store,n)]))[:self.w-6],CYAN,True)
         self.lines(12,3,n.get('preview') or 'Opening formation: '+', '.join(n['waves'][0]),limit=3,color=DIM)
-        self.put(15,3,n.get('navigator','Mona').upper()+' INTEL  /  '+n.get('tactic',''),GOLD,True)
+        self.put(15,3,'TACTICS',GOLD,True)
         self.lines(16,3,n.get('hint',''),limit=self.h-20,color=WHITE)
 
     def dials_required(self):
@@ -215,9 +206,7 @@ class CampaignApp(BattleUI):
         self.lines(6,3,'Translate the lock word from left to right using Kaneshiro’s journal.')
         pairs=tuple(VAULT_MAP.items())
         for j in range(2):self.put(10+j,3,'   '.join(a+'='+b for a,b in pairs[j*6:(j+1)*6]),CYAN)
-        self.mid(14,'     '.join(word),GOLD,True)
         self.mid(15,'   '.join('['+x+']' for x in self.code.ljust(4,'_')),WHITE,True)
-        if self.dial:self.put(18,3,'OPENED: '+', '.join(VAULT_WORDS[:self.dial]),GREEN)
         self.lines(19,3,self.dial_notice,limit=2,color=GOLD)
     def key_dials(self,k):
         if k==ESC:self.code='';self.dial_notice='';self.page='brief'
@@ -230,7 +219,7 @@ class CampaignApp(BattleUI):
             elif self.code!=code:self.code='';self.dial_notice='That lock did not turn. Check the notebook.'
             else:
                 self.dial+=1;self.code='';self.dial_notice=''
-                if self.dial==4:self.page='brief';self.notice='DIALS OPEN  /  ENTER TO DEPLOY'
+                if self.dial==4:self.page='brief';self.notice='DIALS OPEN'
 
     def open_squad(self,back):
         self.back=back;self.edit=list(self.store.data['squad']);self.i=0;self.page='squad';self.notice=''
@@ -245,10 +234,13 @@ class CampaignApp(BattleUI):
             rows.append((f'{mark} {n}  /  '+('Wild Card lead' if n=='Joker' else TEAM[n]['role']),'',own))
         self._b_list(rows,6,3,self.w-6,9,self.i)
         n=names[self.i]
-        if n=='Joker':self.put(17,3,f'Joker upgrades: +{d["joker_hp"]} HP  /  +{d["joker_sp"]} SP',CYAN)
+        if n=='Joker':
+            if d['joker_hp'] or d['joker_sp']:
+                self.put(17,3,f'+{d["joker_hp"]} HP  /  +{d["joker_sp"]} SP',CYAN)
         elif n in d['teammates']:
-            self.put(17,3,f'{n}  /  {TEAM[n]["hp"]} HP  {TEAM[n]["sp"]} SP',CYAN)
-            self.lines(18,3,'Upgrades: '+(', '.join(d['team_skills'].get(n,[])) or 'none'),limit=2,color=DIM)
+            self.put(17,3,f'{TEAM[n]["hp"]} HP  /  {TEAM[n]["sp"]} SP',CYAN)
+            if d['team_skills'].get(n):
+                self.lines(18,3,'Learned: '+', '.join(d['team_skills'][n]),limit=2,color=DIM)
         else:self.put(17,3,'This Thief has not joined the campaign.',DIM)
 
     def stage(self):
@@ -263,9 +255,9 @@ class CampaignApp(BattleUI):
         b=self._b_battle
         if b.phase not in ('win','loss') or (self.finished is not None and not retry):return
         self.finished=time.monotonic()
-        if b.phase=='loss':self.notice='NO CAMPAIGN PROGRESS CHANGED';return
+        if b.phase=='loss':self.notice='';return
         self.grade=stage_grade(b)
-        if self.testing:self.notice='PRACTICE ONLY  /  STORY SAVE UNCHANGED';return
+        if self.testing:self.notice='';return
         self.first=self.node['id'] not in self.store.data['cleared']
         try:
             self.reward=self.store.clear(self.node['id'],self.grade);self.error=None
@@ -295,14 +287,13 @@ class CampaignApp(BattleUI):
         else:title=(self.label()+' SECURED' if self.chapter_final() else 'OPERATION CLEARED') if win else 'SQUAD DEFEATED'
         footer=('ENTER RETRY SAVE  ESC MAP' if self.error else
                 'ENTER RETRY  L LOG  ESC MAP' if not win else
-                (f'↵ {self.label(self.ch+1)}' if self.new_chapter() else '↵ MAP')+'  R REPLAY  L LOG  S SQUAD  V CARDS  ESC MAP')
+                (f'↵ {self.label(self.ch+1)}  ' if self.new_chapter() else '')+'R REPLAY  L LOG  S SQUAD  V CARDS  ESC MAP')
         self.panel('PALACE / DEBRIEF','◆ '+title+'  //  '+self.node['title'].upper(),footer)
         if win:
             self.put(7,3,('PRACTICE MEDAL  ' if self.testing else 'MEDAL  ')+str(self.grade),GOLD,True)
             self.put(8,3,'S: all standing at 50%+ HP  A: ¾+ standing  B: otherwise',DIM)
         if self.error:self.lines(10,3,self.error,limit=4,color=RED);return
-        if self.testing:self.lines(11,3,'No campaign rewards or progress. All built battles remain available.');return
-        if not win:self.lines(10,3,'Joker cannot continue. Retry with fresh supplies, or return to the map to adjust the team.');return
+        if self.testing or not win:return
         y=10
         if self.reward:
             self.put(y,3,'FIRST-CLEAR REWARDS',CYAN,True);y+=1
@@ -313,12 +304,10 @@ class CampaignApp(BattleUI):
                     self.put(y,3,f'◆ {label}: '+(', '.join(v) if isinstance(v,(list,tuple)) else '+'+str(v)),WHITE);y+=1
             for name,moves in self.reward.get('team_skills',{}).items():
                 self.put(y,3,f'◆ {name} learned '+', '.join(moves),WHITE);y+=1
-        else:self.put(y,3,'Replay complete. First-clear rewards cannot repeat.',DIM);y+=1
         if self.first and self.node.get('story_after') and y+1<self.h-5:
             self.lines(y+1,3,self.node['story_after'],limit=min(4,self.h-6-y),color=DIM)
         if self.new_chapter():self.put(self.h-5,3,'NEW PALACE UNLOCKED  /  '+self.label(self.ch+1),GREEN,True)
         elif self.chapter_final():self.lines(self.h-5,3,self.chapters[self.ch].get('completion','Palace secured.'),limit=1,color=GREEN)
-        else:self.put(self.h-5,3,'NEXT ROUTE  /  '+self.nodes()[self.near()]['title'].upper(),GREEN,True)
 
     def open_velvet(self,back,compendium=False):
         d=self.store.data
@@ -343,7 +332,6 @@ class CampaignApp(BattleUI):
                 rows.append((f'{"◆" if f.get("available",f.get("allowed",False)) else "▣"} {name}   {r["cost"]} cr','',True))
         self._b_list(rows,6,3,self.w-6,8,self.i)
         name=names[self.i]
-        self.put(y,3,name.upper(),CYAN,True)
         if self.tab:
             spec=self.store.persona_spec(name) if hasattr(self.store,'persona_spec') else content.PERSONA_DATA[name]
             self.put(y+1,3,f'{len(self.mask_edit)}/{d["slots"]} active  •  ★ starting Persona',DIM)
@@ -351,14 +339,14 @@ class CampaignApp(BattleUI):
             self.lines(y+4,3,'Defense: '+(', '.join(f'{a} {v}' for a,v in spec['affinity'].items()) or 'Normal'),limit=2,color=DIM)
         else:
             f=self.store.fusion_options(name)
-            self.lines(y+1,3,' + '.join(f['recipe']['parents'])+'  →  '+name,limit=2)
-            self.lines(y+3,3,f.get('reason') or 'Preview first. Registered parents stay in the Compendium.',limit=2,color=DIM)
+            self.lines(y+1,3,' + '.join(f['recipe']['parents']),limit=2)
+            if f.get('reason'):self.lines(y+3,3,f['reason'],limit=2,color=DIM)
     def donor_options(self):
         return [(None,None)]+[(n,k) for n,skills in self.fusion['donors'].items() for k in skills]
     def draw_fusion(self):
         f=self.fusion;r=f['recipe'];d=self.store.data
         self.panel('VELVET ROOM / FUSION PREVIEW','◆ '+' + '.join(r['parents'])+'  →  '+r['result'],
-                   '↑↓ INHERIT ONE SKILL  F FUSE  ESC CANCEL')
+                   '↑↓ SELECT  F FUSE  ESC CANCEL')
         self.put(6,3,f'PRICE {r["cost"]}  /  {d["credits"]} ON HAND  /  {d["credits"]-r["cost"]} AFTER',CYAN)
         spec=content.PERSONA_DATA[r['result']]
         self.lines(7,3,'Base skills: '+', '.join(spec['skills']),limit=2,color=DIM)
@@ -368,8 +356,7 @@ class CampaignApp(BattleUI):
     def draw_registered(self):
         d=self.store.data
         self.panel('VELVET ROOM / REGISTERED','◆ '+self.fused.upper()+' IS REGISTERED','E EQUIP NOW  ESC KEEP REGISTERED')
-        self.lines(7,3,'The equipped Personas have not changed yet.')
-        self.lines(10,3,'Choose which mask to replace.' if len(d['loadout'])>=d['slots'] else 'An open slot is ready.')
+        if len(d['loadout'])>=d['slots']:self.lines(7,3,'Your loadout is full. Equipping this Persona requires a swap.')
     def draw_replace(self):
         d=self.store.data;n=d['loadout'][self.sub]
         self.panel('VELVET ROOM / EQUIP SWAP','◆ EQUIP '+self.fused.upper(),'↑↓ SELECT  ENTER CONFIRM REPLACEMENT  ESC CANCEL')
@@ -404,18 +391,22 @@ class CampaignApp(BattleUI):
         self.story_view=(self.ch,self.pick,self.marks,self.node,self.cached_trials)
         self.testing=True;self.store=new;self.ch=self.pick=0
         self.marks={};self.node=None;self.cached_trials=None
-        self.notice='ALL BUILT BATTLES OPEN  /  NO STORY SAVES';self.page='map'
+        self.notice='';self.page='map'
     def leave_map(self):
         if self.testing:
             self.ch,self.pick,self.marks,self.node,self.cached_trials=self.story_view
             self.store=self.story;self.testing=False;self.story_view=None
-            self.notice='TESTING MODE CLOSED  /  STORY SAVE UNCHANGED'
+            self.notice=''
             self.restore_focus=self.story_visited
         else:self.notice=''
         self.i=0 if self.story.status=='ready' else 1;self.page='title'
     def leave_result(self):
         self.page='map'
         if not self.testing:self.pick=self.near()
+
+    def open_gallery(self,return_to):
+        if self.gallery is None:self.gallery=AnimationGallery()
+        self.gallery_return=return_to;self.page='gallery'
 
     def key(self,k):
         kl=k.lower() if isinstance(k,str) else k
@@ -442,11 +433,10 @@ class CampaignApp(BattleUI):
             elif choose==2:self.start_testing()
             elif choose==3:
                 self.i=3
-                if self.gallery is None:self.gallery=AnimationGallery()
-                self.notice='';self.page='gallery'
+                self.notice='';self.open_gallery('title')
             elif choose==4:return False
         elif page=='gallery':
-            if not self.gallery.key(self,k):self.page='title'
+            if not self.gallery.key(self,k):self.page=self.gallery_return
         elif page=='confirm':
             if k==ESC:self.page='title';self.notice='CURRENT SAVE KEPT'
             elif kl=='n':self.start_story()
@@ -466,6 +456,7 @@ class CampaignApp(BattleUI):
             if k==ESC:self.leave_map()
             elif k in (C.KEY_LEFT,C.KEY_RIGHT) and self.opened()>1:self.switch(1 if k==C.KEY_RIGHT else -1)
             elif kl in ('h','?') and not self.testing:self.start_drill()
+            elif kl=='g' and self.testing:self.open_gallery('map')
             elif kl=='s':self.open_squad('map')
             elif kl=='v':self.open_velvet('map')
             elif kl=='t':
@@ -582,7 +573,7 @@ class CampaignApp(BattleUI):
             self.battle_key(k)
             if self.page==-1:
                 self.cached_trials={k:v for k,v in vars(self).items() if k.startswith('_b_')}
-                self.page='map';self.notice='TRAINING ONLY  /  Campaign save unchanged'
+                self.page='map';self.notice=''
         return True
 
     def run(self):
@@ -612,13 +603,14 @@ def run_curses(s,store,seed):
         C.COLOR_RED,C.COLOR_YELLOW,C.COLOR_CYAN,C.COLOR_WHITE,C.COLOR_WHITE,C.COLOR_GREEN]
     for i,color in enumerate(colors,1):C.init_pair(i,color,bg)
     install_scene_palette(bg)
+    # Distinguish a lone Esc from an arrow sequence without a full-second wait.
+    if 'ESCDELAY' not in os.environ:C.set_escdelay(55)
     s.keypad(True);s.timeout(80)
     CampaignApp(s,store,seed).run()
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description='Play the reconstructed Phantom Campaign offline.')
-    default=Path(__file__).with_name('campaign-save.json')
-    p.add_argument('--save',type=Path,default=Path(os.environ.get('PHANTOM_CAMPAIGN_SAVE',str(default))))
+    p=argparse.ArgumentParser(description='Play Phantom Campaign offline.')
+    p.add_argument('--save',type=Path,default=Path(os.environ.get('PHANTOM_CAMPAIGN_SAVE',str(DEFAULT_SAVE))))
     p.add_argument('--seed',type=int,default=None,help=argparse.SUPPRESS)
     args=p.parse_args()
     try:C.wrapper(run_curses,Campaign(args.save),args.seed)

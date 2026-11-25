@@ -54,7 +54,7 @@ class CinematicTests(unittest.TestCase):
                         for w,h in ((65,25),(100,34),(120,40)):
                             app.w,app.h=w,h
                             app.out.clear()
-                            app.draw_cutin(title,t)
+                            app.draw_cutin(title,t,finishing=False)
                             self.assertTrue(app.out)
                             self.assertNotIn(title,app.out)
                             if beat:

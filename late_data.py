@@ -78,7 +78,7 @@ def _n(id,title,mark,before,after,waves,*,hint=None,gate=None,mechanic=None,
     if id.startswith(('cruiser-','depths-')):
         extra['forbidden_team'] = ['Crow','Violet']
     return dict(id=id,title=title,map_mark=mark,brief=before,
-        story_before=before,story_after=after,waves=waves,navigator='Oracle',
+        story_after=after,waves=waves,navigator='Oracle',
         tactic='Compressed Royal route / Adapted combat',
         hint=hint or 'Scout carefully, preserve recovery, and change tactics when an attack is ineffective.',
         reward=dict(credits=400,joker_sp=3,**({'teammates':list(recruits)} if recruits else {})),

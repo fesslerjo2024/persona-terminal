@@ -29,7 +29,7 @@ class FullScreenTests(unittest.TestCase):
                     duration=cutins.duration(title)
                     made=[]
                     for frac in (.02,.13,.36,.55,.72,.87):
-                        _,runs=cinema.paint(title,duration*frac,w,h)
+                        _,runs=cinema.paint(title,duration*frac,w,h,finishing=False)
                         art=rows_of_art(runs)
                         self.assertEqual(len(art),h)
                         self.assertTrue(all(len(row)==w for row in art))

@@ -13,8 +13,8 @@ import cutins
 @dataclass(frozen=True)
 class Clip:
     title: str
-    subtitle: str
-    detail: str
+    duo: tuple[str, ...] = ()
+    preview_only: bool = False
     hp: tuple[int, int] | None = None
 
 
@@ -27,18 +27,17 @@ class PreviewHP:
 def catalog():
     order = tuple(cutins.ALL_OUT)
     return (
-        ('SHOWTIMES', tuple(Clip(*card, ' + '.join(n for n in order if n in pair) + ' / ASCII scene')
+        ('SHOWTIMES', tuple(Clip(card[0], tuple(n for n in order if n in pair))
                             for pair, card in cutins.SHOWTIMES.items())),
-        ('ALL-OUT ATTACKS', tuple(Clip(*card, name + ' / animated finisher')
-                                  for name, card in cutins.ALL_OUT.items())),
+        ('ALL-OUT ATTACKS', tuple(Clip(card[0]) for card in cutins.ALL_OUT.values())),
         ('ORACLE SUPPORT', (
-            Clip(*cutins.ORACLE_SUPPORT, 'Futaba / squad support'),
-            Clip(*cutins.FINAL_GUARD, 'Futaba / protects against a fatal hit'),
-            Clip(*cutins.ORACLE, 'Futaba / animated aerial All-Out Attack'),
+            Clip(cutins.ORACLE_SUPPORT[0]),
+            Clip(cutins.FINAL_GUARD[0], preview_only=True),
+            Clip(cutins.ORACLE[0]),
         )),
         ('BATTLE EFFECTS', (
-            Clip('DAMAGE FLASH', 'Lost HP flashes red and drains to the new total.', 'HP bar / normal damage', (100, 56)),
-            Clip('FINAL HIT / WAVE CLEAR', 'The last Shadow falls and the next formation comes in.', 'HP bar / knockout', (68, 0)),
+            Clip('DAMAGE FLASH', hp=(100, 56)),
+            Clip('FINAL HIT / WAVE CLEAR', hp=(68, 0)),
         )),
     )
 
@@ -111,13 +110,14 @@ class AnimationGallery:
                 self._advance(now)
                 clip = self.clip
         if self.started is None:
-            app.frame('METAVERSE / ANIMATION GALLERY', '←→ CATEGORY  ↑↓ SELECT  ENTER PLAY  P PLAY ALL  ESC BACK')
-            app.put(4, 3, '◆  ANIMATION GALLERY', GOLD, True)
-            app.put(6, 3, f'‹  {self.groups[self.group][0]}  ›   {self.group+1}/{len(self.groups)}', CYAN, True)
-            app.put(7, 3, 'During playback: Enter skips, R replays, Esc stops.', DIM)
-            rows = [(c.title, c.detail, True) for c in self.clips]
-            app._b_list(rows, 9, 4, app.w-8, app.h-15, self.index)
-            app.put(app.h-5, 4, clip.detail, GOLD)
+            app.frame('ANIMATION GALLERY', '←→ CATEGORY  ↑↓ SELECT  ↵ PLAY  P PLAY ALL  ESC BACK')
+            app.put(5, 3, f'‹ {self.groups[self.group][0]} ›  {self.group+1}/{len(self.groups)}', CYAN, True)
+            rows = []
+            for entry in self.clips:
+                extra = ' + '.join(entry.duo) if entry.duo else 'Preview only' if entry.preview_only else ''
+                label = f'{entry.title}  ·  {extra}' if extra else entry.title
+                rows.append((label, '', True))
+            app._b_list(rows, 7, 4, app.w-8, min(len(rows),app.h-11), self.index)
             return
         elapsed = now - self.started
         if clip.hp is None:

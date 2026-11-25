@@ -65,13 +65,13 @@ class BattleUI:
         self._b_put(y,x,text,CYAN,True,width=w)
         self._b_rule(y+1,x,w,DIM)
 
-    def _b_list(self,rows,y,x,w,h,idx,shortcut=True):
+    def _b_list(self,rows,y,x,w,h,idx,shortcut=True,details=True):
         """Rows are (title, detail, enabled); return selected row."""
         if not rows:
             self._b_put(y,x,'Nothing available.',DIM,width=w)
             return
         i=max(0,min(idx,len(rows)-1))
-        step=2 if h>=len(rows)*2 and self.w>=78 else 1
+        step=2 if details and h>=len(rows)*2 and self.w>=78 else 1
         visible=max(1,h//step)
         start=min(max(0,i-visible//2),max(0,len(rows)-visible))
         for n,row in enumerate(rows[start:start+visible],start):
@@ -159,48 +159,37 @@ class BattleUI:
 
     def _b_setup_draw(self):
         wide=self.w>=85
-        title='VELVET ROOM / SQUAD'
-        self.frame(title,'↑ ↓ SELECT   ENTER TOGGLE   ← → TRIAL   D LEVEL   S DEPLOY   ESC BACK')
-        a,x=3, self.w//2+1
-        left=(x-a-2) if wide else self.w-6
+        a,x=3,self.w//2+1
+        left=x-a-2 if wide else self.w-6
         right=self.w-x-3
         meta=self._b_trial_names[self._b_trial]
         trial=self._b_trials[meta]
         needed=trial.get('party_size',4)-1
+        footer='←→ TRIAL  D DIFFICULTY  S DEPLOY  ESC MAP'
+        if needed:footer='↑↓ ALLY  ↵ TOGGLE  '+footer
+        self.frame('VELVET ROOM / SQUAD',footer)
         count=trial.get('wave_count',len(trial.get('waves') or []))
-        waves='WAVES VARY' if not count else '1 WAVE' if count==1 else f'{count} WAVES'
+        waves='Waves vary' if not count else '1 wave' if count==1 else f'{count} waves'
         if trial.get('shuffle_count'):
-            waves+=f' / {trial["shuffle_count"]} SHUFFLED SHADOWS'
-        self._b_heading(4,a,f'TEAM  {len(self._b_selected)}/{needed}  +  JOKER' if needed else 'WILD CARD  /  JOKER ONLY',left)
-        if wide:
-            self._b_heading(4,x,'TRIAL DOSSIER',right)
-            self._b_put(6,x,f'{self._b_trial+1:02}/{len(self._b_trial_names):02}  {meta}',GOLD,True,width=right)
-            self._b_put(8,x,f'LEVEL  {self._b_levels[self._b_diff].upper()}',CYAN,True,width=right)
-            self._b_put(9,x,waves,CYAN,True,width=right)
-            self._b_par(11,x,trial.get('description',''),right,3,WHITE)
-            if trial.get('hint'):
-                self._b_heading(14,x,'ORACLE INTEL',right)
-                self._b_par(16,x,trial['hint'],right,3)
-            self._b_par(20,x,'Joker can change Persona. Build a squad with distinct elements and someone who can keep it standing.',right,3)
-        rows=[]
-        for name in self._b_roster:
-            record=self._b_team[name]
-            selected=needed and name in self._b_selected
-            role=record.get('role','')
-            persona=record.get('persona','')
-            health='  '+f'HP {record["hp"]} / SP {record["sp"]}' if wide else ''
-            rows.append((f'{"●" if selected else "○"} {name:<8} {persona}{health}',role,bool(needed)))
-        if self._b_roster:
-            self._b_list(rows,6,a,left,max(1,(self.h-12 if wide else min(8,self.h-17))),self._b_index)
-            tip=self._b_team[self._b_roster[self._b_index]].get('role','')
-        else:tip=''
-        if wide:
-            self._b_par(self.h-8,a,tip,left,2,GOLD)
+            waves+=f' · {trial["shuffle_count"]} random Shadows'
+        overview=f'{self._b_levels[self._b_diff]} · {waves}'
+        self._b_heading(4,a,f'TEAM  {len(self._b_selected)}/{needed}  +  JOKER' if needed else 'JOKER ONLY',left)
+        if needed:
+            rows=[]
+            for name in self._b_roster:
+                record=self._b_team[name]
+                health=f'  HP {record["hp"]} / SP {record["sp"]}' if wide else ''
+                rows.append((f'{"●" if name in self._b_selected else "○"} {name:<8} {record.get("persona","")}{health}',record.get('role',''),True))
+            picked=self._b_list(rows,6,a,left,max(1,(self.h-12 if wide else min(8,self.h-17))),self._b_index,details=False)
+            if picked and picked[1]:
+                self._b_par(self.h-7 if wide else 14,a,picked[1],left,2 if wide else 1,GOLD)
         else:
-            self._b_heading(15,a,f'TRIAL  {meta}  /  {self._b_levels[self._b_diff].upper()}',left)
-            self._b_put(17,a,waves,CYAN,True,width=left)
-            self._b_par(18,a,trial.get('description',''),left,2,WHITE)
-        self._b_put(self.h-5,3,self._b_message or ('Select three allies, then deploy.' if needed else 'Solo trial: your selected squad stays on standby.'),GOLD,width=self.w-6)
+            self._b_par(6,a,'No allies or Baton Pass in this trial.',left,1,WHITE)
+        ty,tx,tw=(4,x,right) if wide else (16 if needed else 9,a,left)
+        self._b_heading(ty,tx,meta,tw)
+        self._b_put(ty+2,tx,overview,WHITE,width=tw)
+        self._b_par(ty+3,tx,trial.get('hint',''),tw,3 if wide or not needed else min(2,max(1,self.h-ty-8)))
+        if self._b_message:self._b_put(self.h-4,3,self._b_message,GOLD,width=self.w-6)
 
     @staticmethod
     def _b_modifiers(u):
@@ -251,13 +240,13 @@ class BattleUI:
     def _b_action_menu(self):
         b=self._b_battle
         caps=[
-            ('skills','Persona','Open skills; Joker can cycle Personas with ←/→.'),
-            ('attack','Attack','Strike one Shadow without spending SP.'),
-            ('gun','Gun','Use ammunition to exploit gun affinity.'),
+            ('skills','Persona','Spend HP or SP on skills.'),
+            ('attack','Attack',''),
+            ('gun','Gun',f'{b.actor.ammo}/{b.actor.max_ammo} rounds left.'),
             ('guard','Guard','Brace until this fighter’s next turn.'),
-            ('items','Items','Use the squad’s shared supplies.'),
+            ('items','Items',''),
             ('baton','Baton Pass','Hand your extra action to another teammate.'),
-            ('allout','All-Out Attack','Finish a Hold Up with a team strike.'),
+            ('allout','All-Out Attack',''),
             ('analyze','Analyze','Inspect a Shadow without spending this turn.'),
         ]
         rows=[]
@@ -319,13 +308,16 @@ class BattleUI:
         active=b.actor
         wide=self.w>=91
         split=max(32,(self.w-1)//2)
-        footer='↑ ↓ SELECT   ENTER CONFIRM   ESC BACK   I STATUS   L LOG   ? HELP'
-        if b.phase=='turn' and self._b_screen=='actions' and self._b_category=='skills':
-            footer='↑ ↓ SKILL   ENTER SELECT   I STATUS   ESC BACK'
-            if active.name=='Joker' and not b.shifted:
-                footer='← → PERSONA   ↑ ↓ SKILL   ENTER SELECT   I STATUS   ESC BACK'
-        self.frame('VELVET ROOM / SHADOW TRIAL',footer)
-        self._b_put(3,3,'? Unknown · Normal W Weak R Resist N Null P Repel D Drain',DIM,width=self.w-6)
+        nav='↑↓ SELECT  ↵ CONFIRM'
+        if b.phase!='turn':
+            footer='↵ REMATCH  S SQUAD  L LOG  ESC MAP'
+        elif self._b_screen=='command':
+            restart='R RESET' if getattr(self,'page',None)=='trials' else 'R RETRY'
+            footer=f'↑↓ SELECT  ↵ USE  I STATUS  L LOG  ? HELP  {restart}  ESC MAP'
+        else:
+            switch='←→ PERSONA  ' if self._b_screen=='actions' and self._b_category=='skills' and active.name=='Joker' and not b.shifted else ''
+            footer=f'{switch}{nav}  I STATUS  ESC BACK'
+        self.frame('VELVET ROOM / SHADOW TRIAL' if getattr(self,'page',None)=='trials' else 'PALACE / COMBAT',footer)
         wave_line=f'WAVE {shown_wave}/{b.wave_count}  •  '+('CLEARED' if self._b_outgoing else f'ROUND {b.round}   /   {b.difficulty.upper()}')
         if len(wave_line)>split-4 and not self._b_outgoing:
             wave_line=f'{shown_wave}/{b.wave_count}  ROUND {b.round}  {b.difficulty.upper()}'
@@ -343,7 +335,7 @@ class BattleUI:
         if not self._b_outgoing:self._b_turn_strip(5)
         self._b_heading(6,3,'PHANTOM THIEVES • '+b.persona,split-5)
         right=self.w-split-3
-        self._b_put(6,split,'SHADOW FORMATION / AFFINITIES',CYAN,True,width=right)
+        self._b_put(6,split,'SHADOW AFFINITIES',CYAN,True,width=right)
         self._b_affinity_row(7,split,right)
         double=self.h>=31
         tall=wide and self.h>=37
@@ -393,13 +385,13 @@ class BattleUI:
             text=('!  ' if len(boss_intent)+3<=limit else '')+boss_intent
             if len(text)>limit:text=text[:limit-1]+'…'
             self._b_put(top-1,3,text,RED,True,width=limit)
-        label=f'{active.name.upper()}  /  COMMAND'
-        if b.hold_up:label=f'HOLD UP!  /  ALL-OUT ATTACK: {b.allout_damage} DAMAGE'
-        elif b.one_more:label=f'{active.name.upper()}  /  ONE MORE!   CHAIN {b.chain}'
+        label='COMMANDS'
+        bonus='HOLD UP!' if b.hold_up else (f'ONE MORE! · CHAIN {b.chain}' if b.one_more else '')
+        if bonus:label=bonus
         self._b_put(top,3,label,RED if b.hold_up else GOLD if b.one_more else CYAN,True,width=(split-5 if wide else self.w-6))
         if wide:
             self._b_heading(top,split,getattr(b,'navigator','Oracle').upper()+' / BATTLE LOG',self.w-split-3)
-        start=top+2
+        start=top+1
         end=self.h-6
         h=max(1,end-start+1)
         commands=self._b_action_menu()
@@ -412,41 +404,40 @@ class BattleUI:
                 weak=self._b_weak_targets(aid)
                 if weak:action_label+=' [WEAK]'
                 spec=b._spec(aid)
-                if weak and spec and spec['target']=='enemies':detail='Weak: '+', '.join(u.name for u in weak)
+                if weak and spec and spec['target']=='enemies':detail+=' · Weak: '+', '.join(u.name for u in weak)
                 menu.append((action_label,reason or detail,not reason))
             category=self._b_category.upper()
             if self._b_category=='skills':
                 name=(self._b_persona_view or b.persona) if active.name=='Joker' else self._b_team[active.name]['persona']
-                category='PERSONA: '+name
-                if active.name=='Joker' and name!=b.persona:
-                    self._b_put(top+1,3,'Equips when you use a skill.',DIM,width=(split-5 if wide else self.w-6))
-            self._b_put(top,3,active.name.upper()+' / '+category+(' / ONE MORE!' if b.one_more else ''),GOLD if b.one_more else CYAN,True,width=split-5 if wide else self.w-6)
+                if active.name=='Joker' and name==b.persona:category='SKILLS'
+                elif active.name=='Joker':category=name+' / PREVIEW'
+                else:category=name
+            self._b_put(top,3,category+('  /  '+bonus if bonus else ''),GOLD if bonus else CYAN,True,width=split-5 if wide else self.w-6)
         else:
             targets=b.targets(self._b_id)
             menu=[]
             for u in targets:
                 reason=None if self._b_id=='analyze' else b.action_block(self._b_id,u,self._b_persona_view)
-                detail=f'HP {u.hp:g}/{u.max_hp:g}   SP {u.sp:g}/{u.max_sp:g}'+('   DOWN' if u.down else '')
                 title=('[WEAK] ' if u in self._b_weak_targets(self._b_id) else '')+u.name
-                menu.append((title,reason or detail,not reason))
-            self._b_put(top,3,'TARGET  /  '+self._b_action_title+(' / ONE MORE!' if b.one_more else ''),GOLD,True,width=(split-5 if wide else self.w-6))
-        context=picked_target if self._b_screen=='targets' else active
-        if not tall and context and self._b_modifiers(context) and not (
-           self._b_screen=='actions' and self._b_category=='skills' and self._b_persona_view not in (None,b.persona)
-        ):
-            self._b_mod_draw(top+1,3,split-5 if wide else self.w-6,context)
+                menu.append((title,reason or '',not reason))
+            self._b_put(top,3,self._b_action_title+' → TARGET'+('  /  '+bonus if bonus else ''),GOLD,True,width=(split-5 if wide else self.w-6))
         w=split-5 if wide else self.w-6
-        picked=self._b_list(menu,start,3,w,h,self._b_index)
+        picked=self._b_list(menu,start,3,w,h,self._b_index,details=False)
+        if len(menu)>h:
+            more=f'{min(self._b_index+1,len(menu))}/{len(menu)}'
+            self._b_put(top,3+w-len(more),more,DIM,width=len(more))
         if wide:
             for y in range(top+2,self.h-4):
                 self._b_put(y,split-3,'│',DIM)
-            self._b_log_draw(start,split,self.w-split-3,h+1)
-        if self._b_message or (picked and not picked[2]):
-            self._b_par(self.h-5,3,'BLOCKED: '+(self._b_message or picked[1]),self.w-6,2,GOLD)
+            self._b_log_draw(top+2,split,self.w-split-3,h)
+        reason=self._b_message or (picked[1] if picked and not picked[2] else '')
+        if reason and len(reason)>self.w-6:
+            self._b_par(self.h-5,3,reason,self.w-6,2,GOLD)
         else:
-            if not wide and b.log and self.h-5>end:
+            if not wide and b.log:
                 self._b_put(self.h-5,3,str(b.log[-1]),WHITE,width=self.w-6)
-            self._b_put(self.h-4,3,picked[1] if picked else '',DIM,width=self.w-6)
+            hint=reason or (picked[1] if picked else '')
+            if hint:self._b_put(self.h-4,3,hint,GOLD if reason else DIM,width=self.w-6)
 
     def _b_log_draw(self,y,x,w,count,offset=0):
         lines=[]
@@ -462,48 +453,32 @@ class BattleUI:
         b=self._b_battle
         win=b.phase=='win'
         self._b_put(top,3,'◆  TRIAL CLEARED' if win else '◆  SQUAD DEFEATED',GREEN if win else RED,True,width=self.w-6)
-        self._b_par(top+2,3,
-            'The Shadows are down. The Velvet Room records your victory.' if win else
-            'Joker can’t continue. Try another squad, guard against weaknesses, or change your Persona.',
-            self.w-6,2,WHITE)
-        self._b_put(top+5,3,'ENTER  REMATCH      S  SQUAD SETUP      L  BATTLE LOG',GOLD,True,width=self.w-6)
-        if b.log and top+7<self.h-4:self._b_put(top+7,3,str(b.log[-1]),DIM,width=self.w-6)
+        if not win:self._b_put(top+2,3,'Joker was knocked out.',WHITE,width=self.w-6)
+        if b.log and top+3<self.h-4:self._b_put(top+3,3,str(b.log[-1]),DIM,width=self.w-6)
 
     def _b_over(self):
         b=self._b_battle
         if self._b_overlay=='log':
-            self.frame(getattr(b,'navigator','Oracle').upper()+' / BATTLE LOG','↑ ↓ / PGUP PGDN SCROLL   ESC BACK')
+            self.frame(getattr(b,'navigator','Oracle').upper()+' / BATTLE LOG','↑↓ SCROLL  ESC BACK')
             self._b_log_draw(4,3,self.w-6,self.h-8,self._b_log_scroll)
         elif self._b_overlay=='status':
-            self.frame(getattr(b,'navigator','Oracle').upper()+' / FIELD STATUS','ESC OR I BACK   •   ↑ BUFF / ↓ DEBUFF   •   NUMBER = OWN TURNS LEFT')
-            self._b_put(4,3,'PHANTOM THIEVES',CYAN,True)
-            y=5
-            for roster in (b.allies,b.enemies):
-                if roster is b.enemies:
-                    y+=1
-                    self._b_put(y,3,'SHADOW FORMATION',RED,True)
-                    y+=1
-                for u in roster:
-                    state='KO' if not u.alive else '  '.join(
-                        item for item in ('DOWN' if u.down else '', 'GUARD' if u.guard else '',str(u.status).upper()) if item
-                    )
-                    x=3
-                    name=f'{u.name:<18}'
-                    self._b_put(y,x,name,WHITE,True,width=18)
+            self.frame(getattr(b,'navigator','Oracle').upper()+' / FIELD STATUS','ESC BACK')
+            cols=(self.w-6)//2
+            for title,roster,x,color in (('PHANTOM THIEVES',b.allies,3,CYAN),('SHADOWS',b.enemies,5+cols,RED)):
+                self._b_put(4,x,title,color,True,width=cols-2)
+                for i,u in enumerate(roster):
+                    y=6+i*3
+                    state='KO' if not u.alive else ' '.join(item for item in (
+                        'DOWN' if u.down else '', 'GUARD' if u.guard else '', str(u.status).upper()) if item)
+                    self._b_put(y,x,u.name+(f' [{state}]' if state else ''),WHITE,True,width=cols-2)
                     flags=f'HP {u.hp}/{u.max_hp}  SP {u.sp}/{u.max_sp}'
-                    self._b_put(y,22,flags,DIM,width=self.w-25)
-                    if state:self._b_put(y+1,3,state,GOLD,width=18)
-                    if self._b_modifiers(u):self._b_mod_draw(y+1,22,self.w-25,u)
-                    y+=2
-            if y<self.h-4:
-                p=getattr(b,'reaper_phase','')
-                q=getattr(b,'reaper_intent','')
-                if b.phase=='turn' and (p or q):
-                    self._b_par(y+1,3,'  /  '.join(i for i in (p,q) if i),self.w-6,2,GOLD)
-                else:
-                    self._b_par(y+1,3,'One More and Baton Pass are bonus actions, not additional turns on the clock.',self.w-6,2)
+                    if getattr(u,'max_ammo',0):flags+=f'  GUN {u.ammo}'
+                    self._b_put(y+1,x,flags,DIM,width=cols-2)
+                    self._b_mod_draw(y+2,x,cols-2,u)
+            if any(self._b_modifiers(u) for u in b.allies+b.enemies):
+                self._b_put(self.h-4,3,'↑ Buff   ↓ Debuff   Number = turns left',DIM,width=self.w-6)
         elif self._b_overlay=='intel':
-            self.frame(getattr(b,'navigator','Oracle').upper()+' / AFFINITY SCAN','ESC BACK   •   ANALYZE DOES NOT CONSUME YOUR TURN')
+            self.frame(getattr(b,'navigator','Oracle').upper()+' / AFFINITY SCAN','ESC BACK')
             target=self._b_analyzed
             self._b_heading(4,3,target.name.upper(),self.w-6)
             self._b_put(6,3,f'HP {target.hp}/{target.max_hp}   SP {target.sp}/{target.max_sp}',WHITE)
@@ -514,18 +489,17 @@ class BattleUI:
                 v=info.get(e,'unknown')
                 color=GOLD if v=='weak' else DIM if v=='unknown' else CYAN
                 self._b_put(9+i//3*2,3+(i%3)*spacing,f'{e.upper():<9} {v.upper()}',color,width=spacing-1)
-            self._b_par(19,3,'Unobserved affinities remain unknown. Test elements carefully: a Shadow can block, repel or drain them.',self.w-6,2)
         elif self._b_overlay=='help':
             self.frame(getattr(b,'navigator','Oracle').upper()+' / TACTICS','ESC BACK')
             topics=[
-                ('PERSONA SWITCH','Open Persona on Joker’s turn. Use ←/→ to cycle Personas and see their skills. Using a skill equips that Persona. Esc cancels.'),
+                ('AFFINITIES','? Unknown · Normal W Weak R Resist N Null P Repel D Drain'),
+                ('PERSONA SWITCH','Joker can preview skills without changing masks. Using one equips the new Persona.'),
                 ('ONE MORE','A fresh knockdown or weakness KO on a standing Shadow earns One More. Hits on already-downed targets don’t.'),
                 ('BATON PASS','Hand an extra action to an eligible ally. Chain different teammates to boost damage.'),
                 ('HOLD UP','Down every living Shadow. Joker must be standing for an All-Out Attack; more allies standing means more damage.'),
-                ('SURVIVE','Watch your own affinities. Guard before enemy pressure, heal early, and save SP for openings.'),
-                ('ANALYZE','Inspect a Shadow’s known affinities without spending your turn. Discover the rest by trying elements.'),
+                ('ANALYZE','Read known affinities without spending your turn. Try an element to learn its effect.'),
             ]
-            line=5
+            line=4
             for title,detail in topics:
                 self._b_put(line,3,title,GOLD,True)
                 self._b_par(line+1,3,detail,self.w-6,2,WHITE)
@@ -533,23 +507,22 @@ class BattleUI:
         else:
             abandon=self._b_overlay=='abandon'
             title='END THIS TRIAL?' if abandon else 'RETURN TO SAFE ROOM?'
-            self.frame('VELVET ROOM / PAUSED','ENTER CONFIRM   ESC STAY')
+            self.frame('VELVET ROOM / PAUSED','↵ YES  ESC BACK')
             self.mid(7,title,GOLD,True)
-            self._b_par(10,3,'The current fight ends. Choose a new squad or deploy again.' if abandon else
-                 'Your current fight stays paused. Open Velvet Room again to pick up where you left off.',
+            self._b_par(10,3,'Current trial progress will be lost.' if abandon else
+                 'The current fight can be resumed.',
                  self.w-6,3,WHITE)
 
-    def draw_cutin(self,title,elapsed=0.0):
+    def draw_cutin(self,title,elapsed=0.0,*,finishing=True):
         """Only paint the animation. Names and controls belong to the menu."""
-        scene=cinema.get(title)
-        if not scene:
+        if not cinema.has(title):
             # Defensive fallback for unknown future events, with no captions.
             size=max(1,min(18,int(elapsed*18)+1))
             for dy in (-2,-1,0,1,2):
                 self._b_put(self.h//2+dy,self.w//2-size-1,'*',GOLD)
                 self._b_put(self.h//2+dy,self.w//2+size+1,'*',GOLD)
             return
-        _,rows=cinema.paint(title,elapsed,self.w-1,self.h)
+        _,rows=cinema.paint(title,elapsed,self.w-1,self.h,finishing=finishing)
         self.draw_scene_rows(rows)
 
     def draw_scene_rows(self,rows):
@@ -573,7 +546,8 @@ class BattleUI:
             self._b_over()
         elif self._b_cut_in:
             title,_,started,_=self._b_cut_in
-            self.draw_cutin(title,now-started)
+            foes=self._b_cut_damage[2] if self._b_cut_damage else ()
+            self.draw_cutin(title,now-started,finishing=bool(foes) and not any(u.alive for u in foes))
         elif self._b_screen=='setup':
             self._b_setup_draw()
         else:
@@ -754,7 +728,12 @@ class BattleUI:
                 self._b_screen='command'; self._b_index=self._b_saved_index
                 self._b_persona_view=None
             elif k==ESC:
-                self._b_overlay='resume'
+                if getattr(self,'page',None)=='trials':
+                    # Classic Trials can be resumed. Returning to the map
+                    # needs no destructive-action confirmation.
+                    self.page=-1
+                else:
+                    self._b_overlay='resume'
             self._b_message=''
             return True
         if self._b_screen=='command':

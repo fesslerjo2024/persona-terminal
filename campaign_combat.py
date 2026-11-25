@@ -3,16 +3,23 @@ from battle_engine import Battle
 import campaign_data as config
 
 
+def stage_party(campaign,node):
+    """Return the actual deployed allies, shared by the briefing and combat."""
+    if node.get('party_size')==1:
+        return {}
+    team = {name: spec for name,spec in campaign.party_loadout().items()
+            if name not in node.get('forbidden_team', ())}
+    for name,spec in team.items():
+        spec.update(node.get('team_overrides', {}).get(name, {}))
+    return team
+
+
 def build_stage(campaign, node_id, seed=None):
     if campaign.status != 'ready' or not campaign.can_play(node_id):
         raise ValueError('Clear the previous operation before deploying.')
     node = campaign.get_node(node_id)
     data = campaign.data
-    team = {name: spec for name,spec in campaign.party_loadout().items()
-            if name not in node.get('forbidden_team', ())}
-    for name,spec in team.items():
-        spec.update(node.get('team_overrides', {}).get(name, {}))
-    if node.get('party_size')==1:team={}
+    team = stage_party(campaign,node)
     masks = campaign.persona_loadout()
     nav = node.get('navigator', 'Oracle' if set(data.get('oracle', ())) and
                    node_id.startswith(('space', 'casino', 'cruiser', 'depth', 'lab')) else 'Mona')

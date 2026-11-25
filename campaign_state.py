@@ -25,7 +25,7 @@ except ImportError:  # Unix is preferred; file-change checks still run elsewhere
     fcntl = None
 
 BASE = Path(__file__).resolve().parent
-DEFAULT_SAVE = BASE / 'weekend-campaign-save.json'
+DEFAULT_SAVE = BASE / 'campaign-save.json'
 VERSION = 1
 MAX_SAVE_BYTES = 2 * 1024 * 1024
 MAX_SQUAD = 3

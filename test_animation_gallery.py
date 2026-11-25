@@ -82,3 +82,75 @@ class GalleryTests(unittest.TestCase):
         self.assertTrue(g.key(self.app, ESC, now=3.3))
         self.assertIsNone(g.started)
         self.assertFalse(g.key(self.app, ESC, now=3.3))
+
+    def test_testing_gallery_shortcut_round_trips_map_and_keeps_sandbox(self):
+        from copy import deepcopy
+        self.app.story.new_game()
+        before=self.save.read_bytes()
+        self.assertTrue(self.app.key('3'))
+        self.assertTrue(self.app.testing)
+        self.app.key(C.KEY_RIGHT)
+        self.app.key(C.KEY_DOWN)
+        self.app.notice='TEST SESSION'
+        map_state=(self.app.ch,self.app.pick,dict(self.app.marks),self.app.notice)
+        practice_store=self.app.store
+        practice_data=deepcopy(practice_store.data)
+        self.app.draw_map()
+        self.assertIn('G ANIMATION GALLERY', ' '.join(self.app.out))
+        for key in ('g','G'):
+            self.assertTrue(self.app.key(key))
+            self.assertEqual(self.app.page,'gallery')
+            self.app.key('\n')
+            self.app.key(ESC)
+            self.assertEqual(self.app.page,'gallery')
+            self.app.key(ESC)
+            self.assertEqual(self.app.page,'map')
+            self.assertEqual((self.app.ch,self.app.pick,self.app.marks,self.app.notice),map_state)
+            self.assertTrue(self.app.testing)
+            self.assertIs(self.app.store,practice_store)
+            self.assertEqual(self.app.store.data,practice_data)
+        self.app.key(ESC)
+        self.assertEqual(self.app.page,'title')
+        self.app.key('4')
+        self.app.key(ESC)
+        self.assertEqual(self.app.page,'title')
+        self.assertEqual(self.save.read_bytes(),before)
+
+    def test_story_map_does_not_take_testing_gallery_shortcut(self):
+        self.app.story.new_game()
+        self.app.key('1')
+        self.assertEqual(self.app.page,'map')
+        self.app.key('g')
+        self.assertEqual(self.app.page,'map')
+        self.assertIsNone(self.app.gallery)
+
+    def test_map_footer_and_classic_trials_escape_are_unambiguous(self):
+        from unittest.mock import patch
+        self.app.key('3')
+        with patch.object(self.app, 'put', wraps=self.app.put) as draw:
+            self.app.draw_map()
+        shortcuts=[args for args,_ in draw.call_args_list
+                   if 'G ANIMATION GALLERY' in str(args[2]) or 'T CLASSIC TRIALS' in str(args[2])]
+        self.assertEqual(len(shortcuts),1)
+        self.assertEqual(shortcuts[0][0],self.app.h-1)
+        self.assertIn('ESC TITLE',shortcuts[0][2])
+        self.app.key('t')
+        self.assertEqual(self.app.page,'trials')
+        self.app.key('t')
+        self.assertEqual(self.app.page,'trials')
+        self.app.key(ESC)
+        self.assertEqual(self.app.page,'map')
+        self.app.key('t')
+        self.app.key('s')
+        battle=self.app._b_battle
+        self.assertIsNotNone(battle)
+        self.app.key(ESC)
+        self.assertEqual(self.app.page,'map')
+        self.app.key('t')
+        self.assertEqual(self.app.page,'trials')
+        self.assertIs(self.app._b_battle,battle)
+        self.app.key(ESC)
+        self.assertEqual(self.app.page,'map')
+        self.app.key(ESC)
+        self.assertEqual(self.app.page,'title')
+        self.assertFalse(self.save.exists())

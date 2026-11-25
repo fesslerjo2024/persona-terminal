@@ -1,59 +1,94 @@
-"""Central lookup for authored terminal cinematics and their exact runtime."""
-from functools import cache
+"""Authored native terminal clips, plus an explicit legacy cel test adapter."""
+from functools import cache, partial
+from typing import NamedTuple
 
-import oracle_scene
-import wrestling_scene
+
+class NativeClip(NamedTuple):
+    seconds: float
+    draw: object
+    finisher: str | None = None
+
+
+def _merge(*sets):
+    catalog = {}
+    for scenes in sets:
+        duplicate = catalog.keys() & scenes.keys()
+        if duplicate:
+            raise ValueError(f'Duplicate cinematics: {sorted(duplicate)}')
+        catalog.update(scenes)
+    return catalog
 
 
 @cache
-def _catalog():
-    # Deferred imports avoid dependency cycles; some scene modules reuse
-    # cut-in titles, and cutins.duration routes through this registry.
+def _native_catalog():
+    # Every time comes from the same scene source used to draw the clip.
+    import native_diner
+    import native_finales
+    import native_openers
+    import native_stage
+    import wide_allout
+    import wide_oracle
+    import wide_wrestling
+    from wrestling_scene import TITLE as WRESTLING
+
+    def bind(draw, lengths):
+        return {title: NativeClip(seconds, partial(draw, title))
+                for title, seconds in lengths.items()}
+
+    return _merge(
+        {WRESTLING: NativeClip(wide_wrestling.SECONDS, wide_wrestling.render)},
+        {title: NativeClip(seconds, partial(wide_oracle.render, title),
+                          'Oracle' if title == wide_oracle.TITLE else None)
+         for title, (seconds, _, _) in wide_oracle._SCENES.items()},
+        {title: NativeClip(wide_allout.SECS[actor], partial(wide_allout.render, title), actor)
+         for title, actor in wide_allout.BY_TITLE.items()},
+        bind(native_diner.render, {native_diner.TITLE: native_diner.SECONDS}),
+        bind(native_openers.render, {
+            'ROSE & REVOLVER': native_openers.ROSE[-1],
+            'HIGHWAY TO TROUBLE': native_openers.ROAD[-1],
+        }),
+        bind(native_stage.render, native_stage.DURATIONS),
+        bind(native_finales.render, native_finales.DURATIONS),
+    )
+
+
+def has(title):
+    return title in _native_catalog()
+
+
+def duration(title):
+    clip = _native_catalog().get(title)
+    return clip.seconds if clip is not None else 0.0
+
+
+def paint(title,t,width,height,*,finishing=True):
+    """Draw directly at the current viewport size, never from a legacy cel."""
+    clip = _native_catalog()[title]
+    beat,frame = clip.draw(t,width,height)
+    if finishing and clip.finisher is not None:
+        from finishing_type import apply
+        frame = apply(frame,clip.finisher,t,width,height)
+    return beat,frame
+
+
+@cache
+def _legacy_catalog():
+    # The old 57x15 frames remain for historical regression tests and are
+    # not the authority for playback, native render selection, or duration.
     import allout_scenes
+    import oracle_scene
     import showtime_finales
     import showtime_openers
     import showtime_stage
+    import wrestling_scene
 
-    authored = {}
-    sets = (
+    return _merge(
         {wrestling_scene.TITLE: (wrestling_scene.SECONDS, wrestling_scene.render)},
         oracle_scene.SCENES, allout_scenes.SCENES, showtime_finales.SCENES,
         showtime_openers.SCENES, showtime_stage.SCENES,
     )
-    for scenes in sets:
-        duplicate = authored.keys() & scenes.keys()
-        if duplicate:
-            raise ValueError(f'Duplicate cinematics: {sorted(duplicate)}')
-        authored.update(scenes)
-    return authored
 
 
 def get(title):
-    return _catalog().get(title)
-
-
-def paint(title,t,width,height):
-    """Draw directly in native cells. Legacy cels are never composited."""
-    import wide_wrestling
-    import wide_oracle
-    import wide_allout
-
-    if title == wrestling_scene.TITLE:
-        return wide_wrestling.render(t,width,height)
-    if title in oracle_scene.SCENES:
-        return wide_oracle.render(title,t,width,height)
-    from cutins import ALL_OUT
-    if any(card[0]==title for card in ALL_OUT.values()):
-        return wide_allout.render(title,t,width,height)
-
-    if title == 'MIDNIGHT TAKEOUT':
-        from native_diner import render
-    elif title in ('ROSE & REVOLVER','HIGHWAY TO TROUBLE'):
-        from native_openers import render
-    elif title in ('THE DUEL AT DUSK','TEA IN THE CROSSHAIRS'):
-        from native_stage import render
-    elif title in ('TWO SIDES OF THE MASK','THE LAST WALTZ'):
-        from native_finales import render
-    else:
-        raise KeyError(title)
-    return render(title,t,width,height)
+    """Legacy compact renderer lookup, retained for existing compatibility."""
+    return _legacy_catalog().get(title)

@@ -35,53 +35,9 @@ def showtime(pair):
 # These presentation assets do not grant, unlock, or alter battle effects.
 ORACLE_SUPPORT = ('ORACLE // MORAL SUPPORT', 'Necronomicon relays a burst of HP and SP.')
 FINAL_GUARD = ('ORACLE // FINAL GUARD', 'A last-second shield covers the squad.')
+# Historical size-of-cutin test threshold; not used for production playback.
 CUTIN_SECONDS = 1.22
 
 
 def duration(title):
-    scene = cinema.get(title)
-    return scene[0] if scene else CUTIN_SECONDS
-
-PAIR_STYLES = {
-    'ROSE & REVOLVER':        ('MONA × PANTHER', 'ROSE / RICOCHET', ('✦', '◆', '✧'), 'red'),
-    'HIGHWAY TO TROUBLE':     ('SKULL × QUEEN', 'IGNITION / OVERDRIVE', ('≻', '»', '›'), 'gold'),
-    'MIDNIGHT TAKEOUT':       ('FOX × SKULL', 'SMOKE / IMPACT', ('⟐', '◆', '◇'), 'cyan'),
-    'THE DUEL AT DUSK':       ('FOX × PANTHER', 'SILHOUETTE / CROSSHAIR', ('✧', '✦', '×'), 'red'),
-    'TEA IN THE CROSSHAIRS':  ('NOIR × MONA', 'CALM / CROSSHAIR', ('◇', '⟐', '◆'), 'gold'),
-    'PALACE BODY SLAM':       ('QUEEN × NOIR', 'LOCK / TAKEDOWN', ('»', '×', '◆'), 'gold'),
-    'TWO SIDES OF THE MASK':  ('JOKER × CROW', 'MASK / SPLIT STRIKE', ('◆', '◇', '×'), 'red'),
-    'THE LAST WALTZ':         ('JOKER × VIOLET', 'STEP / CROSSBLADE', ('✿', '×', '✧'), 'cyan'),
-}
-
-SOLO_STYLES = {
-    'Joker': ('WILD CARD', ('♠', '◆', '◇'), 'red'),
-    'Mona': ('NINE LIVES', ('◆', '✦', '◇'), 'gold'),
-    'Skull': ('THUNDER', ('ϟ', '✦', 'ϟ'), 'gold'),
-    'Panther': ('FLASH POINT', ('✦', '✧', '✦'), 'red'),
-    'Fox': ('FINAL STROKE', ('╱', '◆', '╲'), 'cyan'),
-    'Queen': ('REDLINE', ('›', '»', '›'), 'gold'),
-    'Noir': ('FINALE', ('♦', '◇', '♦'), 'red'),
-    'Crow': ('BLACK MASK', ('◇', '◈', '◇'), 'red'),
-    'Violet': ('LAST STEP', ('✿', '✧', '✿'), 'cyan'),
-}
-
-ORACLE_STYLES = {
-    ORACLE[0]: ('UFO DROP', ('◉', '◆', '◉')),
-    ORACLE_SUPPORT[0]: ('RECOVERY SIGNAL', ('+', '◉', '+')),
-    FINAL_GUARD[0]: ('DEFENSE SIGNAL', ('[', '◆', ']')),
-}
-
-
-def look(title):
-    """Return (kind, cast, motif label, tokens, palette) for the shared renderer."""
-    if title in PAIR_STYLES:
-        cast, motif, tokens, palette = PAIR_STYLES[title]
-        return 'SHOWTIME', cast, motif, tokens, palette
-    if title in ORACLE_STYLES:
-        motif, tokens = ORACLE_STYLES[title]
-        return 'NAVIGATION CUT-IN', 'ORACLE / NECRONOMICON', motif, tokens, 'green'
-    for actor, card in ALL_OUT.items():
-        if title == card[0]:
-            motif, tokens, palette = SOLO_STYLES[actor]
-            return 'ALL-OUT ATTACK', actor.upper(), motif, tokens, palette
-    return 'CUT-IN', 'PHANTOM THIEVES', 'IMPACT', ('◆', '×', '◆'), 'red'
+    return cinema.duration(title)
