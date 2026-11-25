@@ -135,23 +135,26 @@ class SuiteMenuTests(TestCase):
             menu.run(lambda:events.append('campaign') or True)
         self.assertEqual(events,['preview','campaign'])
 
-    def test_p3_disabled_choices_and_skip_do_not_leave_title(self):
-        menu=SuiteMenu(None)
-        menu.put=lambda *args:None
-        seen=[]
-        class Screen:
-            def getmaxyx(self):return 25,65
-            def timeout(self,ms):pass
-            def erase(self):pass
-            def refresh(self):pass
-            keys=iter(('\n',C.KEY_DOWN,'\n',C.KEY_DOWN,'\n',C.KEY_DOWN,'\n'))
-            def get_wch(self):return next(self.keys)
-        menu.s=Screen()
-        with patch.object(menu,'_mouse'), patch('suite_menu.time.monotonic',return_value=20), \
-             patch('persona3_title.draw_intro',side_effect=lambda app,t:seen.append('intro')), \
-             patch('persona3_title.draw_menu',side_effect=lambda app,i:seen.append(i)):
-            self.assertTrue(menu._preview())
-        self.assertEqual(seen,['intro',2,0,0,1,1,2])
+    def test_p3_intro_skip_does_not_start_new_game(self):
+        with TemporaryDirectory() as tmp:
+            path=Path(tmp)/'unused-p3.json'
+            menu=SuiteMenu(None,path)
+            menu.put=lambda *args:None
+            seen=[]
+            class Screen:
+                def getmaxyx(self):return 25,65
+                def timeout(self,ms):pass
+                def erase(self):pass
+                def refresh(self):pass
+                keys=iter(('\n','1','3'))
+                def get_wch(self):return next(self.keys)
+            menu.s=Screen()
+            with patch.object(menu,'_mouse'), patch('suite_menu.time.monotonic',return_value=20), \
+                 patch('persona3_title.draw_intro',side_effect=lambda app,t:seen.append('intro')), \
+                 patch('persona3_title.draw_menu',side_effect=lambda app,i,*_:seen.append(i)):
+                self.assertTrue(menu._preview())
+            self.assertEqual(seen,['intro',1,0])
+            self.assertFalse(path.exists())
 
     def test_p5_first_escape_skips_and_second_returns_to_selector(self):
         with TemporaryDirectory() as tmp:

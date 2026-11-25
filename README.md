@@ -1,6 +1,6 @@
 # Persona 5 Terminal
 
-An offline Persona terminal suite, with Persona 5 as the playable campaign. See [Information Baseline](INFORMATION_BASELINE.md) for screen, data, and file naming rules.
+An offline Persona terminal suite with a Persona 3 spring chapter and the Persona 5 campaign. See [Information Baseline](INFORMATION_BASELINE.md) for screen, data, and file naming rules.
 
 Run from the extracted directory with Python and a curses terminal:
 
@@ -16,12 +16,35 @@ The launch picker offers Persona 3, Persona 4, and Persona 5. Use the arrow
 keys and Enter, press 3–5, or click a card in mouse-enabled terminals.
 The Dark Hour Clock, Tube TV, and Tumbling Card animate when highlighted
 or activated.
-Persona 3 has its own animated title preview. Continue and New Game are
-disabled; Back to Selector or Esc returns to the picker.
+Persona 3 has a playable spring chapter. It uses `persona3-save.json`;
+`--p3-save PATH` gives it another slot. Persona 3 and Persona 5 cannot use
+the same save. Esc from a title returns to the picker.
 Persona 4 is unavailable. Persona 5 runs the original Calling Card intro and
 working campaign. Esc at its title returns to the picker. Use
 `python3 campaign.py --persona5` to bypass the picker, including in existing
 automation. Enter, Space, or Esc skips an intro without selecting anything.
+
+## Persona 3: April to the first full moon
+
+Start at Iwatodai, awaken Orpheus on the dorm rooftop, and deploy with Yukari
+and Junpei on April 20. Later afternoons give you a choice of study, training,
+or time in the dorm; evenings let you explore, prepare Personas, or rest.
+
+Thebel uses five representative floors and stops at the sealed 22F border.
+The entrance teleporter revisits accessed floors or continues the ascent.
+Use **T** on a floor to return to the entrance during the same night, and
+**X** to end the expedition. The entrance can also resume your exact place.
+Patrols move with your steps; revisiting brings back ordinary Shadows, not
+cleared gatekeepers. Travel retains HP, SP and items. Story checkpoints are
+permanent; repeat patrols offer smaller Shuffle Time coin rewards and do not
+duplicate Persona registrations. Practice from the May 9 briefing or the
+epilogue retains no rewards or progress. The Velvet Room uses compact terminal recipes and keeps
+both parent entries. Equip a Persona from the compendium before battle.
+
+May 9 opens the monorail whether or not you finish Thebel. The train timer
+counts committed combat actions, not real seconds. A failure returns to
+pre-board preparation on the same date. This is a Reload-inspired early slice,
+not a full recreation of every day, floor, or Persona system.
 
 ## Campaign
 

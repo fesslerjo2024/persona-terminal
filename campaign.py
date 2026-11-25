@@ -21,6 +21,7 @@ from campaign_combat import build_stage, stage_grade, stage_party, solo_readines
 from casino_route import CasinoRoute
 from palace_menu import Timeline, map_screen, brief_frame, transition_frame, airlock
 from campaign_state import DEFAULT_SAVE, Campaign, TestingCampaign, CampaignError
+from persona3_state import DEFAULT_SAVE as DEFAULT_P3_SAVE, distinct_slots
 
 VAULT_WORDS=('RICH','REAP','HUGE','GOLD')
 VAULT_MAP=dict(zip('RICHEAPUGOLD','010293131841'))
@@ -785,7 +786,7 @@ class CampaignApp(TerminalSurface):
             if not small and back_to_suite and k==ESC and self.page=='title':return True
             if (not small or self.departure is not None or k in ('q','Q')) and not self.key(k):return False
 
-def run_curses(s,save,seed,direct=False):
+def run_curses(s,save,seed,direct=False,p3_save=DEFAULT_P3_SAVE):
     try:C.curs_set(0)
     except C.error:pass
     C.start_color()
@@ -801,13 +802,19 @@ def run_curses(s,save,seed,direct=False):
     def open_persona5():
         return CampaignApp(s,Campaign(save),seed).run(back_to_suite=not direct)
     if direct:open_persona5()
-    else:SuiteMenu(s).run(open_persona5)
+    else:SuiteMenu(s,p3_save,seed).run(open_persona5)
 
 if __name__=='__main__':
     p=argparse.ArgumentParser(description='Open the offline Persona terminal suite.')
     p.add_argument('--persona5',action='store_true',help='Skip the suite picker and open Persona 5 directly.')
     p.add_argument('--save',type=Path,default=Path(os.environ.get('PHANTOM_CAMPAIGN_SAVE',str(DEFAULT_SAVE))))
+    p.add_argument('--p3-save',type=Path,default=Path(os.environ.get('PERSONA3_TERMINAL_SAVE',str(DEFAULT_P3_SAVE))),help='Use a separate Persona 3 save file.')
     p.add_argument('--seed',type=int,default=None,help=argparse.SUPPRESS)
     args=p.parse_args()
-    try:C.wrapper(run_curses,args.save,args.seed,args.persona5)
+    if not args.persona5:
+        try:
+            if not distinct_slots(args.save,args.p3_save) or not distinct_slots(DEFAULT_SAVE,args.p3_save):
+                p.error('Persona 3 and Persona 5 require separate save files.')
+        except (OSError,RuntimeError) as exc:p.error(str(exc))
+    try:C.wrapper(run_curses,args.save,args.seed,args.persona5,args.p3_save)
     except KeyboardInterrupt:pass

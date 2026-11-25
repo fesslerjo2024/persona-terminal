@@ -1,4 +1,4 @@
-"""A native terminal Persona 3 title preview, separate from Story or save state."""
+"""A native Persona 3 title scene. The controller supplies save-based choices."""
 from functools import lru_cache
 from math import cos, pi, sin
 from wide_canvas import Canvas
@@ -6,8 +6,12 @@ from reel_palette import IDS
 
 DURATION = 3.18
 TITLE = 'Persona 3 Terminal'
-MENU = (('Continue', False), ('New Game', False), ('Back to Selector', True))
-MENU_DEFAULT = 2
+MENU = (('Continue', False), ('New Game', True), ('Back to Selector', True))
+MENU_DEFAULT = 1
+
+
+def menu(continue_ready):
+    return ((MENU[0][0],continue_ready),*MENU[1:])
 
 
 def _pace(t):
@@ -223,25 +227,26 @@ def _title_frame(w,h):
 
 
 
-def _choices(top,left):
-    for i,(name,enabled) in enumerate(MENU):
+def _choices(top,left,choices):
+    for i,(name,enabled) in enumerate(choices):
         yield top+5+i*2,left+2,name,enabled
 
 
-def draw_menu(app,selection=MENU_DEFAULT):
+def draw_menu(app,selection=MENU_DEFAULT,choices=MENU,notice=''):
     rows,y,x=_title_frame(app.w-1,app.h)
     app.draw_scene_rows(rows)
     app.put(y+2,x+1,TITLE,IDS['teal'],True)
-    for i,(row,xx,name,enabled) in enumerate(_choices(y,x)):
+    for i,(row,xx,name,enabled) in enumerate(_choices(y,x,choices)):
         active=i==selection
         mark='▶' if active else ' '
         lock=' ' if enabled else '×'
         color=IDS['teal'] if enabled else IDS['slate']
         app.put(row,xx,f'{mark} {lock} {name}'.ljust(23),color,active,active and enabled)
+    if notice:app.put(app.h-4,3,notice[:app.w-6],IDS['amber'],True)
     app.mid(app.h-2,'↑↓ SELECT  ↵ OPEN  ESC BACK',IDS['teal'])
 
 
 def menu_hit(app,x,y):
     _,top,left=_title_frame(app.w-1,app.h)
-    return next((i for i,(row,xx,_,_) in enumerate(_choices(top,left))
+    return next((i for i,(row,xx,_,_) in enumerate(_choices(top,left,MENU))
                  if y==row and xx<=x<xx+23),None)
