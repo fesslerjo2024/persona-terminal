@@ -199,6 +199,7 @@ class CampaignApp(BattleUI):
         if n['id']=='pyramid-guilt':footer+='  P SLABS'
         elif n['id']=='laboratory-counseling':footer+='  P EXAM'
         elif n['id']=='cruiser-industry':footer+='  P ROUTE'
+        elif n['id']=='depths-floor':footer+='  P TILES'
         footer+='  L KIT'
         self.panel(self.label()+' / OPERATION BRIEF','◆ '+n['title'].upper(),footer)
         self.lines(6,3,(not self.testing and n.get('story_before')) or n.get('brief',''),limit=4)
@@ -231,6 +232,9 @@ class CampaignApp(BattleUI):
             self.route_puzzle=LabConsultation()
         elif self.node['id']=='cruiser-industry':
             self.route_puzzle=CruiserMouseRoute()
+        elif self.node['id']=='depths-floor':
+            from depths_floor import DepthsLightFloor
+            self.route_puzzle=DepthsLightFloor()
         else:return
         self.page='route-puzzle'
         self.notice=''
@@ -306,6 +310,9 @@ class CampaignApp(BattleUI):
         elif prep=='cruiser-industry':
             b.items['Medicine']+=1
             b._say('The service route yields one extra Medicine for this attempt.')
+        elif prep=='depths-floor':
+            b.items['Soul Drop']+=1
+            b._say('The light floor cache yields one extra Soul Drop for this attempt.')
         self.battle_init();self._b_battle=b
         self._b_personas=getattr(b,'personas',self._b_personas);self._b_screen='command'
         self._b_record_damage(getattr(b,'damage_events',()),time.monotonic())

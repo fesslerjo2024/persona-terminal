@@ -24,10 +24,13 @@ briefings are based on the game; enemy numbers, waves, and combat pacing are
 terminal adaptations. Only discovered weaknesses are highlighted.
 
 The Bank dials are playable in Story. On the Chamber of Guilt, Cruiser's
-Screens and Servers, and Lab consultation briefings, press **P** to try a
-short optional route interaction. The Cruiser route turns the team into mice
-that can use a vent but cannot open doors. A solve earns one extra battle item
-for that attempt only. Enter deploys
+Screens and Servers, Depths' A Path Painted Through Prison, and Lab
+consultation briefings, press **P** to try a short optional route interaction.
+The Cruiser route turns the team into mice that can use a vent but cannot
+open doors. On the [Depths light floor](https://mysh.dev/tools/persona/5r/view?file=%5CdataR.cpk%5Cscript%5Cfield%5Cfscr0161_002_120.bf),
+each step flips the tile you enter. The nine-tile board is original; the
+later move limits and disks are intentionally omitted. A solve earns one
+extra battle item for that attempt only. Enter deploys
 straight from the briefing. Escape backs out and S skips. **L** opens your
 field kit on any briefing, showing the active roster and equipped magic and
 support without spoiling Shadow affinities.
