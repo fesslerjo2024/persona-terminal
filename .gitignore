@@ -1,0 +1,39 @@
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+
+# Campaign state and local checkpoints
+*-save*.json*
+*_save*.json*
+*save*.json
+*.sav
+*.save
+*.bak
+*.backup
+*.backup-*
+*.old
+*.tmp
+*.log
+saves/
+checkpoints/
+
+# Personal tooling and local credentials
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+*.crt
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
