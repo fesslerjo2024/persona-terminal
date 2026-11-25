@@ -2,6 +2,8 @@
 import curses as C
 import textwrap
 import time
+from cutins import CUTIN_SECONDS, duration as cutin_duration, look as cutin_look
+import wrestling_scene
 
 RED,GOLD,CYAN,WHITE,DIM,GREEN=range(1,7)
 ENTER=(C.KEY_ENTER,'\r','\n')
@@ -18,6 +20,7 @@ AFFINITY={
 }
 HP_FLASH=0.24
 HP_DRAIN=0.42
+HP_SETTLE=0.12
 MODIFIERS=(('attack','ATK'),('defense','DEF'),('agility','AGI'))
 
 
@@ -123,6 +126,9 @@ class BattleUI:
         self._b_log_scroll=0
         self._b_hp_trails={}
         self._b_outgoing=None
+        self._b_cut_in=None
+        self._b_cut_damage=None
+        self._b_cut_queue=[]
 
     def _b_ensure(self):
         if not hasattr(self,'_b_battle'):
@@ -141,9 +147,7 @@ class BattleUI:
             self._b_message=str(exc)
             return
         self._b_battle=new
-        self._b_hp_trails.clear()
-        self._b_record_damage(new.damage_events,time.monotonic())
-        self._b_outgoing=None
+        self._b_prepare_presentation(new,time.monotonic())
         self._b_screen='command'
         self._b_persona_view=None
         self._b_index=0
@@ -308,7 +312,7 @@ class BattleUI:
     def _b_arena(self):
         b=self._b_battle
         now=time.monotonic()
-        self._b_hp_trails={u:a for u,a in self._b_hp_trails.items() if now-a[1]<HP_FLASH+HP_DRAIN}
+        self._b_hp_trails={u:a for u,a in self._b_hp_trails.items() if now-a[1]<HP_FLASH+HP_DRAIN+HP_SETTLE}
         if self._b_outgoing and now>=self._b_outgoing[2]:self._b_outgoing=None
         shown_wave,foes=(self._b_outgoing[:2] if self._b_outgoing else (b.wave,b.enemies))
         active=b.actor
@@ -534,10 +538,55 @@ class BattleUI:
                  'Your current fight stays paused. Open Velvet Room again to pick up where you left off.',
                  self.w-6,3,WHITE)
 
+    def draw_cutin(self,title,subtitle,elapsed=0.0,footer='ENTER / ESC SKIP'):
+        """Draw one timing-independent frame, for combat or a gallery preview."""
+        if title == wrestling_scene.TITLE:
+            self.frame('SHOWTIME // RINGSIDE',footer)
+            beat,rows=wrestling_scene.render(elapsed)
+            inks={'queen':CYAN,'noir':GOLD,'foe':RED,'rope':DIM,
+                  'rail':RED,'face':WHITE,'dim':DIM,'flash':GOLD}
+            left=(self.w-wrestling_scene.WIDTH)//2
+            top=(self.h-wrestling_scene.HEIGHT-4)//2+1
+            self.mid(top-2,title+'  /  QUEEN x NOIR',WHITE,True)
+            for y,row in enumerate(rows,top):
+                x=left
+                for run,ink in row:
+                    if run.strip():self._b_put(y,x,run,inks[ink],ink in ('queen','noir','face','flash'))
+                    x+=len(run)
+            self.mid(top+len(rows),beat,GOLD,True)
+            return
+        kind,cast,motif,tokens,palette=cutin_look(title)
+        accent={'red':RED,'gold':GOLD,'cyan':CYAN,'green':GREEN}[palette]
+        step=min(4,int(max(0.0,elapsed)*5/CUTIN_SECONDS))
+        center=self.h//2
+        # The changing borders and traveling marks keep the important text
+        # fixed in place, including in the first frame and at 65 x 25.
+        span=max(12,min(self.w-8,76))
+        indent=max(3,(self.w-span)//2)
+        left,right=tokens[step%3],tokens[(step+2)%3]
+        self.frame('PHANTOM LINK // CUT-IN',footer)
+        self.mid(center-8,kind,WHITE,True)
+        self._b_put(center-6,indent,('╱' if step%2 else '┄')*span,accent)
+        spread=len(cast)//2+5+2*step
+        self.mid(center-4,cast,accent,True)
+        self._b_put(center-4,max(3,self.w//2-spread),left,WHITE,True)
+        self._b_put(center-4,min(self.w-5,self.w//2+spread),right,WHITE,True)
+        self.mid(center-1,title,accent,True)
+        self.mid(center+2,subtitle,WHITE)
+        self.mid(center+4,f'{left}  {motif}  {right}',accent,True)
+        progress=step*span//4
+        self._b_put(center+6,indent,'━'*progress+'─'*(span-progress),accent)
+
     def battle_page(self):
         self._b_ensure()
+        now=time.monotonic()
+        if self._b_cut_in and now>=self._b_cut_in[3]:
+            self._b_release_cut(now)
         if self._b_overlay:
             self._b_over()
+        elif self._b_cut_in:
+            title,subtitle,started,_=self._b_cut_in
+            self.draw_cutin(title,subtitle,now-started)
         elif self._b_screen=='setup':
             self._b_setup_draw()
         else:
@@ -549,6 +598,47 @@ class BattleUI:
             if now-start>=HP_FLASH+HP_DRAIN:prior=before
             self._b_hp_trails[unit]=(max(prior,before),now)
 
+    def _b_prepare_presentation(self,b,now):
+        self._b_hp_trails.clear()
+        self._b_outgoing=None
+        self._b_cut_in=None
+        self._b_cut_damage=None
+        self._b_cut_queue=[]
+        self._b_present_action(b,b.wave,b.enemies,now)
+
+    def _b_show_damage(self,events,old_wave,old_foes,now):
+        self._b_record_damage(events,now)
+        if self._b_battle.wave!=old_wave and any(foe in self._b_hp_trails for foe in old_foes):
+            self._b_outgoing=(old_wave,old_foes,now+HP_FLASH+HP_DRAIN+HP_SETTLE)
+
+    def _b_start_cut(self,card,now):
+        self._b_cut_in=(*card,now,now+cutin_duration(card[0]))
+
+    def _b_present_action(self,b,old_wave,old_foes,now):
+        cut=getattr(b,'cut_in',None)
+        if cut:
+            self._b_cut_queue=list(getattr(b,'cut_in_queue',()))
+            self._b_cut_damage=(tuple(b.damage_events),old_wave,old_foes)
+            self._b_start_cut(cut,now)
+        else:
+            self._b_show_damage(b.damage_events,old_wave,old_foes,now)
+
+    def _b_release_cut(self,now):
+        if self._b_cut_queue:
+            self._b_start_cut(self._b_cut_queue.pop(0),now)
+            return
+        self._b_cut_in=None
+        if self._b_cut_damage:
+            events,wave,foes=self._b_cut_damage
+            self._b_cut_damage=None
+            self._b_show_damage(events,wave,foes,now)
+
+    def _b_result_animation(self,now):
+        return (self._b_cut_in is not None
+                or self._b_outgoing is not None and now<self._b_outgoing[2]
+                or any(u.hp<before and now-start<HP_FLASH+HP_DRAIN+HP_SETTLE
+                       for u,(before,start) in self._b_hp_trails.items()))
+
     def _b_apply(self,aid,target=None):
         b=self._b_battle
         old=b.actor
@@ -558,9 +648,7 @@ class BattleUI:
             self._b_message=error
             return
         now=time.monotonic()
-        self._b_record_damage(b.damage_events,now)
-        if b.wave!=old_wave and any(foe in self._b_hp_trails for foe in old_foes):
-            self._b_outgoing=(old_wave,old_foes,now+HP_FLASH+HP_DRAIN)
+        self._b_present_action(b,old_wave,old_foes,now)
         self._b_screen='command'
         self._b_persona_view=None
         self._b_index=0 if self._b_battle.actor is not old else self._b_saved_index
@@ -588,6 +676,11 @@ class BattleUI:
 
     def battle_key(self,k):
         self._b_ensure()
+        if self._b_cut_in:
+            now=time.monotonic()
+            if now>=self._b_cut_in[3] or k in ENTER or k==ESC or k==' ':
+                self._b_release_cut(now)
+            return True  # Skip presentation only; never process a second action.
         if self._b_outgoing and time.monotonic()<self._b_outgoing[2]:return True
         b=self._b_battle
         kl=k.lower() if isinstance(k,str) else k

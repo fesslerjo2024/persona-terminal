@@ -1,6 +1,7 @@
 """Offline Velvet Room combat rules. Scenario numbers are tuned for this simulation."""
 from dataclasses import dataclass,field
 import random, math
+from cutins import ORACLE_SUPPORT, all_out as all_out_cut, showtime as showtime_cut
 from battle_data import SKILLS, TEAM, PERSONAS, ITEMS, ENEMIES, ENCOUNTERS
 
 DEFAULT_ATTACK=dict(kind='damage',element='Physical',power=29,target='enemy',accuracy=96)
@@ -73,6 +74,8 @@ class Battle:
   self.enemy_data=ENEMIES if enemy_data is None else enemy_data
   self._story_intent='';self._boss_state={}
   self._support_used=False
+  # Presentation state is separate from damage, initiative and the save.
+  self.cut_in=None;self.cut_in_queue=[];self._ufo_cut_seen=False
   if config.get('shuffle_count'):
    from shuffle_data import SHUFFLE_ENEMIES
    self.enemy_data=SHUFFLE_ENEMIES
@@ -82,6 +85,7 @@ class Battle:
   self.round=1;self.cursor=-1;self.actor=None
   self._say(f'Trial entered: {encounter} // {difficulty}.')
   self._spawn();self._advance()
+  if self._support_used:self._queue_cutin(ORACLE_SUPPORT)
  @property
  def story_intent(self):
   if not self.story:return ''
@@ -330,9 +334,14 @@ class Battle:
          if k in ('buff','debuff') else 'Restore SP' if k=='restore' else
          'Remove stat buffs' if k=='dekaja' else 'Remove stat debuffs' if k=='dekunda' else k.title())
   return ' • '.join([cost,label,tp]+([f'power {p}'] if p else []))
+ def _queue_cutin(self,card):
+  if self.cut_in is None:self.cut_in=card
+  else:self.cut_in_queue.append(card)
  def act(self,id,target=None,*,persona=None):
-  self.damage_events.clear()
+  self.damage_events.clear();self.cut_in=None;self.cut_in_queue.clear()
+  supported=self._support_used
   error=self._act(id,target,persona)
+  if not supported and self._support_used:self._queue_cutin(ORACLE_SUPPORT)
   self.last_error=error
   return error
  def _equip_persona(self,n):
@@ -348,6 +357,7 @@ class Battle:
   if id=='showtime':
    if not self._showtime or target not in self.targets(id):return 'No Showtime is available for that target.'
    title='SHOWTIME / '+' × '.join(self._showtime)
+   self._queue_cutin(showtime_cut(self._showtime))
    self._showtime_spent=True;self._showtime=None
    self._execute(a,self._spec(id),target,title)
    if not self._state() or self.phase=='turn':self._advance()
@@ -371,6 +381,12 @@ class Battle:
   if id=='allout':
    if not self.hold_up:return self.command_block('allout')
    damage=self.allout_damage
+   if self.story:
+    foes=[t for t in self.enemies if t.alive]
+    oracle_drop=('ufo' in self.config.get('oracle_features',()) and not self._ufo_cut_seen
+                 and len(foes)>=2 and all(t.hp<=damage for t in foes))
+    if oracle_drop:self._ufo_cut_seen=True
+    self._queue_cutin(all_out_cut(a.name,oracle_drop))
    self._say(f'All-Out Attack! {self.allout_fighters} standing • {damage} damage per Shadow.')
    for t in self.enemies:
     if t.alive:self._hurt(t,damage)

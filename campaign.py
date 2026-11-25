@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import textwrap
 import time
+from animation_gallery import AnimationGallery
 from battle_data import TEAM
 from battle_ui import BattleUI, RED, GOLD, CYAN, WHITE, DIM, GREEN, ENTER, ESC
 import campaign_data as content
@@ -46,6 +47,7 @@ class CampaignApp(BattleUI):
         self.prologue=0;self.dial=0;self.code='';self.dial_notice=''
         self.grade=None;self.reward=None;self.error=None;self.finished=None
         self.story_visited=False;self.restore_focus=False
+        self.gallery=None
 
     def put(self,y,x,t,color=WHITE,b=False,reverse=False):
         if 0<=y<self.h and 0<=x<self.w-1:
@@ -88,15 +90,16 @@ class CampaignApp(BattleUI):
         return True,result
 
     def title(self):
-        self.frame('TOKYO / OFFLINE LINK','↑↓ SELECT  ENTER OPEN  1–4 JUMP')
+        self.frame('TOKYO / OFFLINE LINK','↑↓ SELECT  ENTER OPEN  1–5 JUMP')
         self.mid(5,'—  M E T A V E R S E   L I N K  —',RED,True)
         self.mid(7,'P H A N T O M   C A M P A I G N',WHITE,True)
         self.mid(9,'◆  PALACE INFILTRATION  /  FIGHT-ONLY  ◆',GOLD)
         ready=self.story.status=='ready'
-        self._b_list([('CONTINUE','',ready),('NEW GAME','',True),('TESTING MODE','',True),('QUIT','',True)],11,5,self.w-10,5,self.i)
+        self._b_list([('CONTINUE','',ready),('NEW GAME','',True),('TESTING MODE','',True),('ANIMATION GALLERY','',True),('QUIT','',True)],11,5,self.w-10,5,self.i)
         tips=('Continue from the campaign autosave.' if ready else 'No readable story save in this slot.',
               'Begin at the Castle; existing saves are backed up.',
-              'All built battles, no story progress or save changes.','Close the terminal.')
+              'All built battles, no story progress or save changes.',
+              'Preview every cut-in and battle effect without a fight.','Close the terminal.')
         self.mid(17,tips[self.i],DIM)
         if self.notice:self.put(self.h-4,3,self.notice[:self.w-6],GOLD)
 
@@ -252,7 +255,7 @@ class CampaignApp(BattleUI):
         except (CampaignError,ValueError) as exc:self.notice='BLOCKED • '+str(exc);self.page='brief';return
         self.battle_init();self._b_battle=b
         self._b_personas=getattr(b,'personas',self._b_personas);self._b_screen='command'
-        self._b_record_damage(getattr(b,'damage_events',()),time.monotonic())
+        self._b_prepare_presentation(b,time.monotonic())
         self.finished=None;self.reward=None;self.error=None;self.grade=None;self.first=False
         self.notice='';self.page='battle'
     def record(self,retry=False):
@@ -275,7 +278,9 @@ class CampaignApp(BattleUI):
             self.lines(9,3,'This attempt ends. An unfinished fight does not change campaign progress.')
             return
         self.record()
-        if self.finished is not None and self._b_overlay is None and time.monotonic()-self.finished>=.68:
+        now=time.monotonic()
+        if (self.finished is not None and self._b_overlay is None and now-self.finished>=.68
+                and not self._b_result_animation(now)):
             self.page='result';self.result();return
         self.battle_page()
         self.record()
@@ -420,7 +425,7 @@ class CampaignApp(BattleUI):
             return False
         page=self.page
         if page=='title':
-            self.i=self.nav(k,self.i,4);choose=self.commit(k,self.i,4)
+            self.i=self.nav(k,self.i,5);choose=self.commit(k,self.i,5)
             if choose==0:
                 status=self.story.reload()
                 if self.story.status=='ready':
@@ -434,7 +439,13 @@ class CampaignApp(BattleUI):
                 if self.story.status=='missing':self.start_story()
                 else:self.page='confirm';self.notice=''
             elif choose==2:self.start_testing()
-            elif choose==3:return False
+            elif choose==3:
+                self.i=3
+                if self.gallery is None:self.gallery=AnimationGallery()
+                self.notice='';self.page='gallery'
+            elif choose==4:return False
+        elif page=='gallery':
+            if not self.gallery.key(self,k):self.page='title'
         elif page=='confirm':
             if k==ESC:self.page='title';self.notice='CURRENT SAVE KEPT'
             elif kl=='n':self.start_story()
@@ -550,7 +561,7 @@ class CampaignApp(BattleUI):
             if self._b_overlay in ('resume','abandon') and k in ENTER:
                 if self._b_overlay=='abandon':self.stage()
                 else:self.page='map';self.notice='ATTEMPT ENDED  /  Campaign save unchanged'
-            elif self._b_battle.phase=='turn' or self._b_overlay is not None:
+            elif self._b_battle.phase=='turn' or self._b_overlay is not None or self._b_cut_in:
                 self.battle_key(k);self.record()
         elif page=='result':
             win=self._b_battle.phase=='win'
@@ -578,7 +589,8 @@ class CampaignApp(BattleUI):
               'map':self.draw_map,'drill':self.draw_drill,'brief':self.brief,'dials':self.draw_dials,'squad':self.draw_squad,
               'velvet':self.draw_velvet,'fusion':self.draw_fusion,'registered':self.draw_registered,
               'replace':self.draw_replace,'cards':self.draw_cards,'battle':self.draw_combat,'result':self.result,
-              'result-log':self.battle_page,'trials':self.battle_page}
+              'result-log':self.battle_page,'trials':self.battle_page,
+              'gallery':lambda:self.gallery.draw(self)}
         while True:
             self.s.erase();self.h,self.w=self.s.getmaxyx()
             small=self.h<25 or self.w<65

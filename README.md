@@ -37,3 +37,15 @@ stat prerequisites aren’t simulated.
 
 Run `python3 -B -m unittest discover -q`. Any testing script should use
 Testing Mode or a disposable separate save slot, never a live save.
+
+## Animation Gallery
+
+On the title screen, press **4** to open the gallery (Quit is now **5**).
+Use Left/Right for categories, Up/Down to select, and Enter to preview.
+Press **P** to play all clips in order, **R** to replay, or **Esc** to back out.
+Gallery previews do not read or alter battle progress.
+
+**Showtimes → 6 Palace Body Slam** is a full ASCII scene: ring entrance,
+Queen’s lariat, Noir’s dropkick, the double dive and the referee’s count.
+The same scene plays for Queen and Noir’s Showtime in combat. Enter, Space,
+or Esc skips the cut-in without skipping damage.
