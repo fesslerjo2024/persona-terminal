@@ -163,10 +163,18 @@ class CampaignApp(BattleUI):
         self.panel('CASE FILE / '+next_ch['id'].upper(),'◆ A NEW CASE  /  '+next_ch['title'].upper(),'ENTER OPEN MAP  ESC SKIP')
         self.lines(8,3,next_ch.get('brief','A new Palace is open. Pick an operation from the map.'),limit=9)
 
+    def completed_operations(self):
+        if self.testing:return None
+        known=self.store.data['cleared']
+        total=len(self.by_id)
+        if total and all(node_id in known for node_id in self.by_id):return total
+        return None
+
     def draw_map(self):
         nodes=self.nodes();d=self.store.data;known=d['cleared']
         complete=sum(n['id'] in known for n in nodes)
         title=f'ALL {len(nodes)} BATTLES OPEN' if self.testing else f'{complete}/{len(nodes)} CLEARED'
+        if total:=self.completed_operations():title=f'CAMPAIGN COMPLETE • {total}/{total}'
         self.panel(f'PALACE / {self.label()} MAP',f'◆ {self.chapters[self.ch]["title"].upper()}  /  {title}',
                    '←→ PALACE  ↑↓ PICK  ↵ BRIEF  S SQUAD  V VELVET  T  ESC')
         tabs='  /  '.join(f'[ {self.label(i)} ]' if i==self.ch else self.label(i) for i in range(self.opened()))
@@ -373,6 +381,8 @@ class CampaignApp(BattleUI):
             for name,moves in self.reward.get('team_skills',{}).items():
                 self.put(y,3,f'◆ {name} learned '+', '.join(moves),WHITE);y+=1
         else:self.put(y,3,'Replay complete. First-clear rewards cannot repeat.',DIM);y+=1
+        if self.chapter_final() and self.ch==len(self.chapters)-1 and (total:=self.completed_operations()):
+            self.put(6,3,f'CAMPAIGN COMPLETE  /  {total}/{total} OPERATIONS',GREEN,True)
         if self.first and self.node.get('story_after') and y+1<self.h-5:
             self.lines(y+1,3,self.node['story_after'],limit=min(4,self.h-6-y),color=DIM)
         if self.new_chapter():self.put(self.h-5,3,'NEW PALACE UNLOCKED  /  '+self.label(self.ch+1),GREEN,True)

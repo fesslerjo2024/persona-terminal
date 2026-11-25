@@ -354,6 +354,7 @@ class BattleUI:
         wide=self.w>=91
         split=max(32,(self.w-1)//2)
         footer='↑ ↓ SELECT   ENTER CONFIRM   ESC BACK   I STATUS   L LOG   ? HELP'
+        if not wide:footer='↑↓ SELECT  ENTER OK  ESC BACK  I STATUS  L LOG  ? HELP'
         if b.phase=='turn' and self._b_screen=='actions' and self._b_category=='skills':
             footer='↑ ↓ SKILL   ENTER SELECT   I STATUS   ESC BACK'
             if active.name=='Joker' and not b.shifted:
@@ -477,6 +478,9 @@ class BattleUI:
         ):
             self._b_mod_draw(top+1,3,split-5 if wide else self.w-6,context)
         w=split-5 if wide else self.w-6
+        if not wide and h==1 and len(menu)>1:
+            position=f'↑↓ {min(self._b_index+1,len(menu))}/{len(menu)}'
+            self._b_put(top+1,self.w-3-len(position),position,DIM,width=len(position))
         picked=self._b_list(menu,start,3,w,h,self._b_index)
         if wide:
             for y in range(top+2,self.h-4):

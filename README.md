@@ -6,15 +6,29 @@ rollback.** It does not change the surviving original Phantom Link source and
 does not use the old campaign save by default. No remote or network access is
 needed to play.
 
-Run from the extracted directory with Python and a curses terminal:
+## Quick start
 
-    python3 campaign.py
+Open the Linux terminal on Futaba’s computer. From the extracted folder run:
 
-The minimum terminal is 65×25. Start a separate playthrough using
-`python3 campaign.py --save my-weekend-save.json`. Avoid using this option
-with a story save from another build. The Testing Mode opens every populated
-chapter and uses only temporary in-memory state. The source archive contains
-no player save, passwords, or private workspace files.
+    python3 campaign.py --save weekend-story.json
+
+Use the same folder and save filename on later launches so Continue finds
+your progress. The ZIP is source, not a Windows installer; the verified
+runtime is Python with curses in a Linux terminal at least 65×25 cells.
+Use a different save path from your original campaign or rollback.
+
+- **1 Continue** reopens the map at your next operation. **2 New Game** starts
+  at the Castle; **N** confirms replacing an existing slot after making a
+  backup, while **Esc** keeps it.
+- **3 Testing Mode** opens all 53 operations without changing Story. It also
+  lets you swap squad and Personas in that temporary session.
+- In battle, open **Persona** on Joker’s turn, then use **←/→** to browse.
+  Selecting a skill and confirming its target commits the switch. Esc cancels
+  a preview, with no SP cost.
+- On an operation brief, **L** checks your loadout; **S** opens Squad and **V**
+  opens the Velvet Room. Story saves progress after battle wins, not mid-fight.
+
+The source archive contains no player save or private workspace files.
 
 ## What is implemented in this checkpoint
 
