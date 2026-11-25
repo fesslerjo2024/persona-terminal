@@ -21,7 +21,10 @@ no player save, passwords, or private workspace files.
 All nine story maps are represented: Castle, Museum, Bank, Pyramid, Spaceport,
 Casino, Cruiser, Depths/Mementos, and Laboratory. Route names and original
 briefings are based on the game; enemy numbers, waves, and combat pacing are
-terminal adaptations. Only discovered weaknesses are highlighted.
+terminal adaptations. Attack hints only use affinities you have learned.
+Target choices flag known WEAK, DRAIN, and REPEL results. A group attack can
+show both a weakness and an absorption or reflection warning; unknown
+affinities still stay unknown until an attack reveals them.
 
 The Bank dials are playable in Story. On the Chamber of Guilt, Cruiser's
 Screens and Servers, Depths' A Path Painted Through Prison, and Lab

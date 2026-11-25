@@ -285,13 +285,35 @@ class BattleUI:
     def _b_action_rows(self):
         return self._b_battle.actions(self._b_category,self._b_persona_view)
 
-    def _b_weak_targets(self,aid):
+    def _b_known_matchups(self,aid):
         b=self._b_battle
-        if not aid:return ()
-        spec=b._spec(aid)
-        if not spec or spec['kind']!='damage' or spec['target'] not in ('enemy','enemies'):return ()
-        targets=b.targets(aid) if spec['target']=='enemy' else b.enemies
-        return tuple(u for u in targets if u.alive and b.seen.get(u.name,{}).get(spec['element'])=='weak')
+        spec=b._spec(aid) if aid else None
+        if not spec or spec['kind']!='damage' or spec['target'] not in ('enemy','enemies'):return {}
+        element=spec.get('element')
+        if element=='Almighty':return {}
+        visible=b.visible_enemies
+        matches={}
+        # Read only confirmed knowledge. Dormant or fallen foes do not count.
+        for u in b.targets(aid) if spec['target']=='enemy' else visible:
+            if not u.alive or u not in visible:continue
+            affinity=b.seen.get(u.name,{}).get(element)
+            if affinity not in ('weak','drain','repel'):continue
+            if affinity!='weak' and element in ('Physical','Gun') and u.status=='freeze':continue
+            matches[u]=affinity
+        return matches
+
+    def _b_skill_preview(self,aid,title,detail):
+        matches=self._b_known_matchups(aid)
+        if not matches:return title,detail
+        weak=[u.name for u,affinity in matches.items() if affinity=='weak']
+        if self._b_battle._spec(aid)['target']!='enemies':
+            return (title+' [WEAK]' if weak else title),detail
+        groups=[(affinity,[u.name for u,value in matches.items() if value==affinity])
+                for affinity in ('drain','repel','weak')]
+        groups=[(affinity,names) for affinity,names in groups if names]
+        tags=' '.join(f'{affinity.upper()} {len(names)}' for affinity,names in groups)
+        title+=f' [{tags}]' if any(affinity!='weak' for affinity,_ in groups) else ' [WEAK]'
+        return title,'; '.join(f'{affinity.title()}: '+', '.join(names) for affinity,names in groups)
 
     def _b_turn_strip(self,y):
         b=self._b_battle
@@ -429,10 +451,7 @@ class BattleUI:
             menu=[]
             for aid,action_label,detail in self._b_action_rows():
                 reason=b.action_block(aid,persona=self._b_persona_view,pick_target=True) if aid.startswith(('skill:','item:')) else None
-                weak=self._b_weak_targets(aid)
-                if weak:action_label+=' [WEAK]'
-                spec=b._spec(aid)
-                if weak and spec and spec['target']=='enemies':detail='Weak: '+', '.join(u.name for u in weak)
+                action_label,detail=self._b_skill_preview(aid,action_label,detail)
                 menu.append((action_label,reason or detail,not reason))
             category=self._b_category.upper()
             if self._b_category=='skills':
@@ -443,11 +462,13 @@ class BattleUI:
             self._b_put(top,3,active.name.upper()+' / '+category+(' / ONE MORE!' if b.one_more else ''),GOLD if b.one_more else CYAN,True,width=split-5 if wide else self.w-6)
         else:
             targets=b.targets(self._b_id)
+            matches=self._b_known_matchups(self._b_id)
             menu=[]
             for u in targets:
                 reason=None if self._b_id=='analyze' else b.action_block(self._b_id,u,self._b_persona_view)
                 detail=f'HP {u.hp:g}/{u.max_hp:g}   SP {u.sp:g}/{u.max_sp:g}'+('   DOWN' if u.down else '')
-                title=('[WEAK] ' if u in self._b_weak_targets(self._b_id) else '')+u.name
+                tag=matches.get(u)
+                title=(f'[{tag.upper()}] ' if tag else '')+u.name
                 menu.append((title,reason or detail,not reason))
             self._b_put(top,3,'TARGET  /  '+self._b_action_title+(' / ONE MORE!' if b.one_more else ''),GOLD,True,width=(split-5 if wide else self.w-6))
         context=picked_target if self._b_screen=='targets' else active
