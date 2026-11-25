@@ -10,6 +10,8 @@ from animation_gallery import AnimationGallery
 from cutins import ACTIVE_ORACLE_FEATURES
 from reel_palette import install as install_scene_palette
 from title_scene import PRODUCT_TITLE, STARTUP_SECONDS, draw_startup, draw_title
+import velvet_entrance
+import velvet_menu
 from battle_data import TEAM
 from battle_ui import BattleUI, RED, GOLD, CYAN, WHITE, DIM, GREEN, ENTER, ESC
 import campaign_data as content
@@ -54,6 +56,7 @@ class CampaignApp(BattleUI):
         self.story_visited=False;self.restore_focus=False
         self.gallery=None;self.gallery_return='title'
         self.casino_route=None
+        self.velvet_started=None
         self.departure=None
         self.palace_timeline=Timeline();self.airlock_started=None
 
@@ -359,6 +362,13 @@ class CampaignApp(BattleUI):
     def open_velvet(self,back,compendium=False):
         self.back=back;self.velvet_parent=None
         self._velvet_panel(compendium)
+        self.velvet_started=time.monotonic();self.page='velvet-entrance'
+    def draw_velvet_entrance(self):
+        elapsed=time.monotonic()-self.velvet_started
+        if elapsed>=velvet_entrance.DURATION:
+            self.velvet_started=None;self.page='velvet'
+            self.draw_velvet()
+        else:self.draw_scene_rows(velvet_entrance.render(elapsed,self.w-1,self.h))
     def _velvet_panel(self,compendium=False):
         d=self.store.data
         self.mask_edit=list(d['loadout']);self.primary=d['primary']
@@ -366,38 +376,41 @@ class CampaignApp(BattleUI):
     def velvet_names(self):
         if self.tab:return list(self.store.data['personas'])
         return [r['result'] for r in getattr(content,'FUSIONS',())]
+    def _velvet_chrome(self,room,heading,footer):
+        velvet_menu.panel(self,room,heading,footer,practice=self.velvet_parent is not None)
     def draw_velvet(self):
         d=self.store.data;names=self.velvet_names()
-        footer=('←→ TAB  ↑↓ PICK  E EQUIP  P LEAD  A CARD  S APPLY  ESC' if self.tab
-                else '←→ TAB  ↑↓ PICK  ENTER PREVIEW  X PRACTICE  ESC BACK'
+        footer=('←→ TAB  ↑↓ PICK  E EQUIP  P LEAD  A CARD  S APPLY  ESC'
+                if self.tab else '←→ TAB  ↑↓ PICK  ENTER PREVIEW  X PRACTICE  ESC BACK'
                 if self.testing and self.velvet_parent is None
                 else '←→ TAB  ↑↓ PICK  ENTER PREVIEW  ESC BACK')
-        heading='◆ '+('[ COMPENDIUM ]' if self.tab else '[ FUSION ]')+'  •  '+str(d['credits'])+' cr'
-        title='VELVET ROOM / PRACTICE' if self.velvet_parent is not None else 'VELVET ROOM'
-        self.panel(title,heading,footer)
+        self._velvet_chrome('','',footer)
+        velvet_menu.tabs(self,self.tab,d['credits'])
+        x,width=velvet_menu.detail_split(self)
         if not names:self.put(6,3,'No entries.',DIM);return
         rows=[]
         for name in names:
             if self.tab:
                 mark='★' if name==self.primary else '●' if name in self.mask_edit else '○'
-                rows.append((f'{mark} {name}','',True))
+                rows.append((f'{mark} {name}',True))
             else:
                 f=self.store.fusion_options(name);r=f['recipe']
                 mark='▣' if not f['available'] else '↻' if f['registered'] else '◆'
-                rows.append((f'{mark} {name}   {r["cost"]} cr','',True))
-        self._b_list(rows,6,3,self.w-6,8,self.i)
+                rows.append((f'{mark} {name}  {r["cost"]} cr',f['available']))
+        velvet_menu.selector(self,rows,6,3,x-7,self.h-12,self.i)
         name=names[self.i]
+        self.put(6,x,name[:width],CYAN,True)
         if self.tab:
             spec=self.store.persona_spec(name)
-            self.put(15,3,f'{len(self.mask_edit)}/{d["slots"]} active  •  ★ lead',DIM)
-            self.lines(16,3,', '.join(spec['skills']),limit=2)
+            self.put(8,x,f'{len(self.mask_edit)}/{d["slots"]} active  •  ★ lead',velvet_menu.STEEL)
+            self.lines(10,x,', '.join(spec['skills']),width=width,limit=4)
             affinities=', '.join(f'{a} {v}' for a,v in spec['affinity'].items()) or 'Normal'
-            self.lines(18,3,'Defense: '+affinities,limit=2,color=DIM)
+            self.lines(15,x,'Defense: '+affinities,width=width,limit=4,color=DIM)
         else:
             f=self.store.fusion_options(name)
-            self.lines(15,3,' + '.join(f['recipe']['parents']),limit=2)
-            if f['reason']:self.lines(17,3,f['reason'],limit=2,color=DIM)
-            elif f['registered']:self.lines(17,3,'Registered. Re-fusion adjusts its inherited skill.',limit=2,color=DIM)
+            self.lines(8,x,' + '.join(f['recipe']['parents']),width=width,limit=2)
+            if f['reason']:self.lines(11,x,f['reason'],width=width,limit=4,color=DIM)
+            elif f['registered']:self.lines(11,x,'Registered. Re-fusion adjusts its inherited skill.',width=width,limit=4,color=DIM)
     def donor_options(self):
         return [(None,None)]+[(n,k) for n,skills in self.fusion['donors'].items() for k in skills]
     def _fusion_selection(self):
@@ -411,12 +424,12 @@ class CampaignApp(BattleUI):
         name,skill,donor=self._fusion_selection()
         f=self.store.fusion_preview(name,skill,donor);r=f['recipe']
         verb='REVIEW RE-FUSION' if f['registered'] else 'FUSE'
-        self.panel('VELVET ROOM / FUSION PREVIEW','◆ '+' + '.join(r['parents'])+'  →  '+name,
+        self._velvet_chrome('FUSION PREVIEW','◆ '+' + '.join(r['parents'])+'  →  '+name,
                    '↑↓ INHERITANCE  F '+verb+'  ESC BACK')
         self.put(6,3,self._fusion_price(r),CYAN)
         self.lines(7,3,'Base: '+', '.join(content.PERSONA_DATA[name]['skills']),limit=2,color=DIM)
         self.put(9,3,'PARENTS STAY REGISTERED',GOLD,True)
-        self._b_list([((k+' ← '+n) if k else 'No inherited skill','',True) for n,k in self.donor_options()],10,3,self.w-6,7,self.sub)
+        velvet_menu.selector(self,[((k+' ← '+n) if k else 'No inherited skill',True) for n,k in self.donor_options()],10,3,self.w-7,7,self.sub)
         if f['reason']:self.lines(18,3,f['reason'],limit=2,color=GOLD)
         elif f['registered']:
             self.lines(18,3,'Gain: '+(', '.join(f['gains']) or 'none')+
@@ -428,7 +441,7 @@ class CampaignApp(BattleUI):
     def draw_refuse(self):
         name,skill,donor=self._fusion_selection()
         f=self.store.fusion_preview(name,skill,donor)
-        self.panel('VELVET ROOM / RE-FUSION','◆ REVISE '+name.upper(),
+        self._velvet_chrome('RE-FUSION','◆ REVISE '+name.upper(),
                    'ENTER CONFIRM RE-FUSION  ESC CANCEL')
         self.put(6,3,self._fusion_price(f['recipe']),CYAN)
         self.put(8,3,'Gain: '+(', '.join(f['gains']) or 'none'),GREEN)
@@ -438,12 +451,12 @@ class CampaignApp(BattleUI):
         self.lines(15,3,'Loadout, lead and parents stay unchanged.',limit=2,color=DIM)
     def draw_registered(self):
         d=self.store.data
-        self.panel('VELVET ROOM / REGISTERED','◆ '+self.fused.upper()+' IS REGISTERED','E EQUIP NOW  ESC KEEP REGISTERED')
+        self._velvet_chrome('REGISTERED','◆ '+self.fused.upper()+' IS REGISTERED','E EQUIP NOW  ESC KEEP REGISTERED')
         if len(d['loadout'])>=d['slots']:self.lines(7,3,'Your loadout is full. Equipping this Persona requires a swap.')
     def draw_replace(self):
         d=self.store.data;n=d['loadout'][self.sub]
-        self.panel('VELVET ROOM / EQUIP SWAP','◆ EQUIP '+self.fused.upper(),'↑↓ SELECT  ENTER CONFIRM REPLACEMENT  ESC CANCEL')
-        self._b_list([(a,'',True) for a in d['loadout']],7,3,self.w-6,5,self.sub)
+        self._velvet_chrome('EQUIP SWAP','◆ EQUIP '+self.fused.upper(),'↑↓ SELECT  ENTER CONFIRM REPLACEMENT  ESC CANCEL')
+        velvet_menu.selector(self,[(a,True) for a in d['loadout']],7,3,self.w-7,5,self.sub)
         self.lines(13,3,f'Replace {n} with {self.fused}.',limit=1)
         if n==d['primary']:self.lines(14,3,self.fused+' becomes the starting Persona.',limit=1,color=GOLD)
         old,new=(self.store.persona_spec(name) for name in (n,self.fused))
@@ -467,10 +480,10 @@ class CampaignApp(BattleUI):
             self.i=self.velvet_names().index(self.fused);self.page='velvet'
     def draw_cards(self):
         name=self.velvet_names()[self.i]
-        self.panel('VELVET ROOM / SKILL CARDS','◆ APPLY A CARD TO '+name.upper(),'↑↓ SELECT  ENTER APPLY ONE CARD  ESC CANCEL')
+        self._velvet_chrome('SKILL CARDS','◆ APPLY A CARD TO '+name.upper(),'↑↓ SELECT  ENTER APPLY ONE CARD  ESC CANCEL')
         cards=self.store.data['skill_cards']
         if not cards:self.put(7,3,'No skill cards found.',DIM)
-        else:self._b_list([(f'{k} ×{v}','',True) for k,v in cards.items()],6,3,self.w-6,self.h-12,self.sub)
+        else:velvet_menu.selector(self,[(f'{k} ×{v}',True) for k,v in cards.items()],6,3,self.w-7,self.h-12,self.sub)
 
     def start_story(self):
         ok,backup=self.transact(self.story.new_game,'NEW CAMPAIGN')
@@ -619,6 +632,9 @@ class CampaignApp(BattleUI):
                     elif n in self.edit:self.edit.remove(n);self.notice=n+' moved to standby.'
                     elif len(self.edit)>=d['squad_slots']:self.notice='BLOCKED • Remove an active ally first.'
                     else:self.edit.append(n);self.notice=n+' selected. Press S to apply.'
+        elif page=='velvet-entrance':
+            if k in (*ENTER,ESC,' '):
+                self.velvet_started=None;self.page='velvet'
         elif page=='velvet':
             if k==ESC:
                 self.notice=''
@@ -732,12 +748,14 @@ class CampaignApp(BattleUI):
         draw={'title':self.title,'confirm':self.confirm,'prologue':self.story_panel,'transition':self.transition,
               'casino-route':self.draw_casino_route,
               'map':self.draw_map,'drill':self.draw_drill,'brief':self.brief,'dials':self.draw_dials,'squad':self.draw_squad,
+              'velvet-entrance':self.draw_velvet_entrance,
               'velvet':self.draw_velvet,'fusion':self.draw_fusion,'refuse':self.draw_refuse,'registered':self.draw_registered,
               'replace':self.draw_replace,'cards':self.draw_cards,'battle':self.draw_combat,'result':self.result,
               'result-log':self.battle_page,'trials':self.battle_page,
               'gallery':lambda:self.gallery.draw(self)}
         startup=True
         started=None
+        fast=False
         while True:
             self.s.erase();self.h,self.w=self.s.getmaxyx()
             small=self.h<25 or self.w<65
@@ -756,6 +774,10 @@ class CampaignApp(BattleUI):
                     if self.departure is not None:self.draw_departure()
                     else:draw[self.page]()
             self.s.refresh()
+            animate=not small and self.page=='velvet-entrance'
+            if animate!=fast:
+                self.s.timeout(32 if animate else 80)
+                fast=animate
             try:k=self.s.get_wch()
             except C.error:continue
             if startup:

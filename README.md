@@ -70,7 +70,10 @@ and payout steps are compressed for terminal pacing.
 
 ## Velvet Room and Shadow Contracts
 
-Use **V** on the map to inspect fusion, the Compendium, and your loadout.
+Use **V** on the map to enter the Velvet Room. A brief blue prison-gate
+scene leads into its working Fusion and Compendium menu. Enter, Esc, or
+Space skips the scene without activating a menu choice. To see it again,
+exit the room and press V. Use Left/Right to switch the menu tabs.
 First fusion remains a straightforward registration. Re-fusing an already
 registered mask previews retained, added and removed skills before an
 explicit confirmation. Only a previous inheritance tracked as such can be

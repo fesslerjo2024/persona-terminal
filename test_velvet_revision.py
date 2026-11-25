@@ -43,6 +43,7 @@ class VelvetRevisionTests(unittest.TestCase):
         app,rows=self.app()
         raw=self.path.read_bytes()
         app.open_velvet('map')
+        app.key(ESC)  # Dismiss the entrance, not the room.
         app.key('1')
         self.choose_inheritance(app,'Cleave')
         app.key('f')
@@ -113,6 +114,7 @@ class VelvetRevisionTests(unittest.TestCase):
         full=app.store;old_data=full.data
         self.assertIn('High Pixie',old_data['personas'])
         app.open_velvet('map')
+        app.key(ESC)  # Dismiss the entrance, not the room.
         app.key('x')
         self.assertIsNot(app.store,full)
         self.assertNotIn('High Pixie',app.store.data['personas'])
@@ -127,6 +129,7 @@ class VelvetRevisionTests(unittest.TestCase):
     def test_escape_clears_failed_notice_and_view_does_not_write(self):
         app,_=self.app();before=self.path.read_bytes()
         app.open_velvet('map')
+        app.key(ESC)  # Dismiss the entrance, not the room.
         app.key('1');app.key('f')
         self.assertIn('Insufficient credits',app.notice)
         app.key(ESC);app.key(ESC)

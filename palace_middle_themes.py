@@ -58,89 +58,154 @@ def _motion(view):
     return max(0,min(1,value if isinstance(value,(float,int)) else 1))
 
 
-def _pyramid_wall(w, h, view):
-    c = Canvas(w,h)
-    eye = _motion(view)
-    completed = 0 if view.testing else min(6,view.cleared)
-    peak = max(3,w//2-1)
-    if h >= 9:
-        # Native-cell silhouette: limestone ledges widen toward the foot.
-        for i,y in enumerate(range(0,h)):
-            r = max(2,min(peak-1,round(peak*(i+2)/(h+2))))
-            x = peak-r
-            inside = ''.join('.' if (iy*11+i*7)%13 in (0,2)
-                             else ' ' for iy in range(2*r-1))
-            c.put(x,y,'/'+inside+'\\','ochre')
-            if i%2 == 0:
-                c.put(x+1,y,'_'*(2*r-1),'amber')
-            if i%3 == 1 and r>4:
-                c.put(x+w//22,y,'.','gold')
-    # Mural segments fill from left to right as operations are cleared.
-    # Empty painted niches (dots) remain even in Testing, which never earns pieces.
-    room = min(w-4,max(17,w*4//5))
-    if w<21:
-        room = w-2
-    frame = max(3,(h-8)//2)
-    ml=(w-room)//2
-    c.put(ml,frame,'+'+'-'*(room-2)+'+','amber',True)
-    c.put(ml,frame+4,'+'+'-'*(room-2)+'+','ochre',True)
-    cell=max(1,(room-2)//6)
-    tiles=(('/\\','./','/_'),('^^','|.','|_'),('>>','<>','<<'),
-           ('{}','=','[]'),('/\\','<>','\\/'),('..','<<','^^'))
-    for y in range(frame+1,frame+4):
-        c.put(ml,y,'|'+' '*(room-2)+'|','ochre',True)
-    for i,tile in enumerate(tiles):
-        x=ml+1+i*cell
-        for j, glyph in enumerate(tile,1):
-            if i<completed:
-                c.put(x,frame+j,glyph[:cell].ljust(cell,':'),
-                      ('teal','amber','cyan','teal','amber','cyan')[i])
-            elif view.testing and i==view.selected:
-                # In Testing only, the selected cell is an illuminated
-                # ghost. Changing selection removes it from the old cell.
-                fragment = glyph[:cell].ljust(cell,'.')
-                c.put(x,frame+j,fragment,'cyan' if eye<.68 else 'violet')
-            elif j==2:
-                c.put(x,frame+j,'.' * max(1,(cell+1)//2),'slate')
-    # At the selected notch, Third Eye briefly lights a passage. A sealed
-    # one remains crossed; the effect is cosmetic and never changes access.
-    pulse = eye < .70
-    bx = ml+1+view.selected*cell+cell//2
-    anchor = view.rows[view.selected]
-    y=frame+5
-    if y+2<h:
-        c.put(bx-1,y,'/\\' if anchor.status!='locked' else '><',
-              'cyan' if pulse else 'teal')
-        ray = min(3,1+int((1-eye)*3))
-        for j in range(1,ray+1):
-            c.put(bx+j//2,y+j,'.' if j%2 else '+','teal' if pulse else 'slate')
+
+# The cutaway faces the desert entrance. The six room indexes remain the
+# same as the keyboard order; their physical tiers rise toward the Sphinx.
+_TOMBS = ((5,), (4,), (2, 3), (0, 1))
+_MURAL = ('/\\', '<>', '~^', '[]', '><', '^*')
+_MURAL_INK = ('teal', 'amber', 'cyan', 'teal', 'gold', 'cyan')
+
+
+def _passage(points):
+    """Return cells in direction-of-travel order along the tunnel's bends."""
+    out = []
+    for (x, y), (tx, ty) in zip(points, points[1:]):
+        n = max(abs(tx-x), abs(ty-y), 1)
+        for step in range(n):
+            p = x+round((tx-x)*step/n), y+round((ty-y)*step/n)
+            if not out or p != out[-1]:
+                out.append(p)
+    return tuple(out+[points[-1]])
+
+
+def _trace(canvas, points, reach, ink, head=None):
+    count = min(len(points), 1+round((len(points)-1)*reach))
+    for x, y in points[:count]:
+        canvas.put(x, y, '·' if ink=='slate' else '•', ink)
+    if head:
+        canvas.put(*points[count-1], head, ink)
+
+
+def _cutaway(w, h, view):
+    """Stage geometry and paint (separate from the full-width label overlay)."""
+    c = Canvas(w, h)
+    mid = w//2
+    stature = h-1
+    frieze = stature
+    starts = [round(stature*f/11) for f in (1,4,7,9)]
+    widths = [round(mid*f) for f in (.59,.70,.88,.99)]
+    room_centers = {}
+    room_areas = {}
+    routes = {}
+    baffles = {}
+    # Sand rises into four clear terraces, rather than a side illustration.
+    # The outer serif of each roof grows separately at the wide terminal.
+    last_l = last_r = mid
+    for tier, indices in enumerate(_TOMBS):
+        y = starts[tier]
+        base = starts[tier+1]-1 if tier<3 else frieze-1
+        left = max(0,mid-widths[tier]); right = min(w-1,mid+widths[tier])
+        rim = 'amber' if tier%2==0 else 'ochre'
+        if tier==0:
+            for j in range(y):
+                cap = max(1,round((j+1)*widths[tier]/max(2,y+1)))
+                c.put(mid-cap,j,'╱'+'─'*(2*cap-1)+'╲',rim)
+        else:
+            c.line(left,y-1,last_l,y-1,rim,'_')
+            c.line(last_r,y-1,right,y-1,rim,'_')
+        c.put(left,y,'╔'+'═'*(right-left-1)+'╗',rim)
+        for j in range(y+1,base+1):
+            c.put(left,j,'╱' if j==base else '│',rim)
+            c.put(right,j,'╲' if j==base else '│',rim)
+        if base>y+1:
+            c.put(left+1,base,'_'*(right-left-1),'ochre')
+            for j in range(y+2,base):
+                # Staggered masonry and small carved pilasters. Place the
+                # pattern below the lettering so no art interrupts a title.
+                for x in range(left+7+(j%2)*3,right-3,9):
+                    c.put(x,j,'─┬─' if j%2 else '──┴','dim')
+                if tier==0:
+                    for x in (left+7,right-8):
+                        c.put(x,j,'╎','ochre')
+        if len(indices)==2:
+            for j in range(y+1,base+1):
+                c.put(mid,j,'║','ochre')
+            # Leave more inside room on the right for Light Across the Chasm.
+            spans=((left+2,mid-2),(mid+2,right-2))
+        else:
+            # Leave the left wall open for the bends of the upper passage.
+            spans=((left+4,right-2),)
+        for idx,(a,b) in zip(indices,spans):
+            room_centers[idx]=(a+b)//2
+            room_areas[idx]=(a,b,y,y+1)
+        baffles[tier]=(left+2,y)
+        last_l,last_r=left,right
+    for idx,(a,b,y,_) in room_areas.items():
+        doorway=room_centers[idx]+7
+        if idx in (5,4):
+            # The upper passage snakes around the great gallery.
+            lx,ly=baffles[1]
+            points=[(mid,frieze-1),(mid,starts[2]-1),(lx,starts[2]-1),(lx,ly)]
+            if idx==5:
+                ux,uy=baffles[0]
+                points.extend(((lx,starts[1]-1),(ux,starts[1]-1),(ux,uy)))
+            points.append((doorway,y))
+        else:
+            points=[(mid,frieze-1),(mid,y),(doorway,y)]
+        routes[idx]=_passage(points)
+    for path in routes.values():
+        _trace(c,path,1,'slate')
+    earned = {i for i,row in enumerate(view.rows) if row.status=='clear'} if not view.testing else set()
+    if earned:
+        next_open = next((i for i,row in enumerate(view.rows) if row.status=='open'),max(earned))
+        _trace(c,routes[next_open],1,'teal','◦')
+    selected=view.rows[view.selected]
+    target=routes[view.selected]
+    t = min(1,_motion(view)/.69)
+    ease=1-(1-t)**2
+    pigment=('gold' if selected.status=='locked' else
+             'violet' if view.testing else 'cyan')
+    _trace(c,target,ease,pigment,'×' if t==1 and selected.status=='locked' else '✦')
+    # The frieze is part of the tomb. In Testing only one projected fragment
+    # follows focus; the underlying slots stay blank and no path is earned.
+    tiles_width = len(view.rows)*5-1
+    start = (w-tiles_width)//2
+    c.put(0,frieze,'╚'+'═'*(w-2)+'╝','ochre')
+    for i,row in enumerate(view.rows):
+        ghost=view.testing and i==view.selected
+        restored=i in earned
+        if restored:
+            tile,ink='['+_MURAL[i]+']',_MURAL_INK[i]
+        elif ghost:
+            tile,ink='‹'+_MURAL[i]+'›','violet'
+        else:
+            tile,ink='[··]','slate'
+        c.put(start+i*5,frieze,tile,ink,True)
     if view.testing:
-        _center(c,w,h-1,'PREVIEW','violet',True)
-    elif h>=11:
-        _center(c,w,h-1,'...:_     _::....','ochre')
-    return c
+        c.put(max(1,start-9),frieze,'PREVIEW','violet',True)
+    return c,room_areas
 
 
 def draw_pyramid(app, view):
-    top=6
-    h=app.h-7-top
-    wide=app.w>=92
-    spacing=min(3,max(2,(h-1)//6)) if wide else 2
-    gap=4 if wide else 2
-    route=app.w*48//100 if wide else min(39,app.w-24)
-    artx=2+route+gap
-    c=_pyramid_wall(app.w-artx-2,h,view)
-    _art(app,artx,top,c)
+    y=6
+    h=app.h-13
+    w=app.w-4
+    c,rooms=_cutaway(w,h,view)
+    _art(app,2,y,c)
     for i,row in enumerate(view.rows):
-        # Steps read left to right without wasting title width at 65 columns.
-        step=i%3 if wide else i//2
-        x=2+step
-        width=route-step
-        y=top+i*spacing
-        if i%2==0 and y+1<top+h:
-            app.put(y+1,x,'_'*max(3,width-5),_ink('ochre'))
-        app.put(y,x,_operation(row,i,width),_row_color(row,'teal'),
+        a,b,header,title=rooms[i]
+        w=b-a+1
+        core=f'{"▶" if row.selected else " "} {i+1:02} {_MARKS[row.status]}'
+        if row.medal:
+            core+=f' [{row.medal}]'
+        col=_row_color(row,'cyan')
+        # Small lintel inset leaves the animated beam and door to its right.
+        stencil=f'┤{core}├'
+        app.put(y+header,2+a+(w-len(stencil))//2-2,stencil,col,
                 row.selected or row.status=='clear',row.selected)
+        # Leave the chamber dark: only its title and lintel carry selection.
+        plaque=row.title
+        app.put(y+title,2+a+(w-len(plaque))//2,plaque,col,row.selected,row.selected)
 
 
 def _station_color(row):
