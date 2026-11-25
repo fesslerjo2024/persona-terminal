@@ -61,14 +61,15 @@ for _name,_tag in zip(('Beast of Human Sacrifice', 'Wings of Human Sacrifice',
 ENEMY_ADDITIONS.update(DEPTHS_ENEMIES)
 ENEMY_ADDITIONS.update(LAB_ENEMIES)
 
-# Six regular Royal pairs are available by the early Casino hideout scene.
-# Queen/Noir unlock after Casino infiltration begins. Joker/Crow only in Lab
-# after the January 9 unlock (fscr0162_001_100). Joker/Violet needs a maxed
-# Faith Confidant and a subsequent hideout meeting, neither simulated here.
+# Five regular Royal pairs are available before Casino infiltration.
+# Queen/Noir joins the rotation there. Joker/Crow unlocks in Lab after the
+# January 9 scene (fscr0162_001_100). In Royal, Joker/Violet needs max Faith
+# and a later meeting; our fight-only proxy is returning after Counseling.
 _PRE_CASINO_PAIRS = (('Mona','Panther'),('Skull','Queen'),('Fox','Skull'),
                      ('Fox','Panther'),('Noir','Mona'))
 _LATE_PAIRS = _PRE_CASINO_PAIRS + (('Queen','Noir'),)
 _LAB_PAIRS = _LATE_PAIRS + (('Joker','Crow'),)
+_LAB_BOND_PAIRS = _LAB_PAIRS + (('Joker','Violet'),)
 
 # Casino Crow is the Robin Hood phase, not the unlocked Loki training kit.
 _ROBIN_HOOD = dict(skills=['Kouga','Makouga','Eiga','One-shot Kill','Rakunda'],
@@ -80,6 +81,7 @@ def _n(id,title,mark,before,after,waves,*,hint=None,gate=None,mechanic=None,
     pairs = () if extra.get('party_size') == 1 else (
         _PRE_CASINO_PAIRS if id == 'casino-service' else
         () if id == 'laboratory-reality' else
+        _LAB_BOND_PAIRS if id in ('laboratory-colors','laboratory-choice') else
         _LAB_PAIRS if id.startswith('laboratory-') else _LATE_PAIRS)
     extra.setdefault('showtime_pairs',pairs)
     if id.startswith('casino-'):
@@ -183,7 +185,7 @@ DEPTHS = (
     prep_hint='Velvet Compendium: use P to set the lead Persona and S to save your loadout. Merely equipping a mask does not set it as lead.'),
  _n('depths-yaldabaoth','The God of Control','FREEDOM',
     'The Grail draws strength through its supply lines. Sever them, then fight its true form and the arms it manifests.',
-    'The public rallies behind the Thieves. Joker manifests Satanael for the decisive shot, ending the god of control. The Royal branch continues only if its earlier story conditions were met.',
+    'The public rallies behind the Thieves. Satanael ends the god of control. In January, the signal returns. Something in Tokyo has changed.',
     DEPTHS_FINAL_WAVES,forbidden_team=['Crow','Violet'],
     hint='Use 9 when the supply lines are exposed. Suppress arms before Divine Apex, or Guard.',
     mechanic=dict(kind='grail_arms_and_finisher')),
@@ -206,7 +208,7 @@ LABORATORY = (
     [['Macabre','Byakhee'],['Laboratory Guardian']],gate=dict(requires='daat_control_room_resolved')),
  _n('laboratory-counseling','Answers He Wants to Hear','TESTS',
     'The consultations reward answers that match the lab’s standards, not your own beliefs. Try the optional examination [P], or go straight to the guards [Enter].',
-    'Beyond the consultations, the laboratory opens onto the colored paths of the final ascent.',
+    'Beyond the consultations, the colored paths open. Joker and Violet have a new Showtime for the final approach.',
     [['Scathach','Nebiros']],mechanic=dict(kind='optional_consultations'),
     prep_hint='Physical hits add up. If owned, lead with Shiki-Ouji to block Physical.'),
  _n('laboratory-colors','A Path Toward Eden','COLORS',
@@ -228,5 +230,5 @@ CHAPTERS = tuple(dict(id=id,title=title,brief=brief,completion=completion,nodes=
  ('casino','Sae\'s Casino','Beat a house built on rigged justice.','The arrest is part of a larger plan.',CASINO),
  ('cruiser','Shido\'s Cruiser','Gather five letters and confront the man at the helm.','The confession does not end the crisis.',CRUISER),
  ('depths','Mementos Depths','Challenge the prison and the god of control.','The original final conflict is resolved.',DEPTHS),
- ('laboratory','Maruki\'s Laboratory','Royal branch: reject a happiness imposed on everyone.','The Thieves choose their own tomorrow.',LABORATORY),
+ ('laboratory','Maruki\'s Laboratory','A perfect Tokyo is offered to the Thieves. Find out what it costs.','The Thieves choose their own tomorrow.',LABORATORY),
 ))

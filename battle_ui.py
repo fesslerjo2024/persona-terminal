@@ -161,7 +161,7 @@ class BattleUI:
     def _b_setup_draw(self):
         wide=self.w>=85
         title='VELVET ROOM / SQUAD'
-        self.frame(title,'↑ ↓ SELECT   ENTER TOGGLE   ← → TRIAL   D LEVEL   S DEPLOY   ESC BACK')
+        self.frame(title,'↑↓ PICK  ↵ TOGGLE  ←→ TRIAL  D LEVEL  S DEPLOY  ESC BACK')
         a,x=3, self.w//2+1
         left=(x-a-2) if wide else self.w-6
         right=self.w-x-3
@@ -592,7 +592,7 @@ class BattleUI:
             self.frame('VELVET ROOM / PAUSED','ENTER CONFIRM   ESC STAY')
             self.mid(7,title,GOLD,True)
             self._b_par(10,3,'The current fight ends. Choose a new squad or deploy again.' if abandon else
-                 'Your current fight stays paused. Open Velvet Room again to pick up where you left off.',
+                 'Your trial stays paused. Press T for Classic Trials on the map to resume.',
                  self.w-6,3,WHITE)
 
     def battle_page(self):

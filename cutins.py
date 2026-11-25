@@ -20,6 +20,7 @@ SHOWTIMES = {
     frozenset(('Noir','Mona')): ('TEA IN THE CROSSHAIRS', 'Service is finished.'),
     frozenset(('Queen','Noir')): ('PALACE BODY SLAM', 'The ring has one rule: stay down.'),
     frozenset(('Joker','Crow')): ('TWO SIDES OF THE MASK', 'Two rivals agree on one thing: the target.'),
+    frozenset(('Joker','Violet')): ('THE LAST WALTZ', 'One perfect step. Two blades finish the dance.'),
 }
 ORACLE = ('ORACLE // UFO PAYLOAD', 'Necronomicon marks the drop zone.')
 

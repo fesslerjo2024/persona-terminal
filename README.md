@@ -21,7 +21,9 @@ Use a different save path from your original campaign or rollback.
   at the Castle; **N** confirms replacing an existing slot after making a
   backup, while **Esc** keeps it.
 - **3 Testing Mode** opens all 53 operations without changing Story. It also
-  lets you swap squad and Personas in that temporary session.
+  lets you swap squad and Personas in that temporary session. Press **T**
+  on either chapter map for Classic Trials, including Reaper Alert and
+  Mementos Shuffle; another **T** resumes a paused trial.
 - In battle, open **Persona** on Joker’s turn, then use **←/→** to browse.
   Selecting a skill and confirming its target commits the switch. Esc cancels
   a preview, with no SP cost.
@@ -91,12 +93,17 @@ After the Pyramid, Oracle can provide Moral Support and one Final Guard per
 battle. A two-or-more-target All-Out Attack that ends a wave can trigger her
 UFO cut-in once per fight. These are predictable terminal adaptations, not a
 claim about Royal's Confidant unlocks or original probabilities. Other
-All-Out Attacks get the initiating Thief's cut-in; the implemented Showtime
-pairs have their own cards. Enter or Esc skips the card, not the hit: on return
+All-Out Attacks get the initiating Thief's cut-in. All eight Showtime pairs
+have their own cards; Joker/Violet joins the rotation on the final Laboratory
+approach (after Counseling), in place of the original Faith Confidant and
+meeting requirements. Enter or Esc skips the card, not the hit: on return
 to the arena, the lost HP flashes red and drains before the next formation or
 debrief. The art and subtitle text are original.
 [Atlus' Futaba trailer](https://www.youtube.com/watch?v=asZwmiMgBBc)
 shows the original UFO presentation.
+[Royal’s Joker/Violet unlock scene](https://www.youtube.com/watch?v=wSUWkZeNcrg)
+and [the recorded Showtime](https://www.youtube.com/watch?v=F6BYdZ34KOM&t=509s)
+inform the original terminal card.
 
 ## Verification
 
