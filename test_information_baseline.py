@@ -10,7 +10,7 @@ from test_animation_gallery import Surface
 
 
 class InformationBaselineTests(unittest.TestCase):
-    def test_default_save_uses_stable_product_name(self):
+    def test_default_save_keeps_established_path(self):
         self.assertEqual(DEFAULT_SAVE.name,'campaign-save.json')
         self.assertEqual(Campaign().path,DEFAULT_SAVE)
 
@@ -18,7 +18,7 @@ class InformationBaselineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             app=Surface(Campaign(Path(d)/'absent.json'))
             app.title()
-            self.assertEqual(sum('PHANTOM CAMPAIGN' in row for row in app.out),1)
+            self.assertEqual(sum('Persona 5 Terminal' in row for row in app.out),1)
             self.assertFalse(any('INFILTRATION  /  FIGHT-ONLY' in row for row in app.out))
 
     def test_briefing_uses_actual_solo_deployment_and_is_read_only(self):
@@ -47,5 +47,5 @@ class InformationBaselineTests(unittest.TestCase):
                 messages=[args for args,_ in draw.call_args_list]
                 for label in ('G ANIMATION GALLERY','T CLASSIC TRIALS','ESC TITLE'):
                     rows=[y for y,x,text,*_ in messages if label in text]
-                    self.assertEqual(rows,[height-1])
+                    self.assertEqual(rows,[height-2])
                 self.assertFalse(any('Enter for briefing' in text for _,_,text,*_ in messages))

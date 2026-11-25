@@ -10,6 +10,7 @@ and original recorded play at https://bai-gaming.com/guides/persona5royal/ .
 from copy import deepcopy
 from battle_data import shadow
 from shuffle_data import SHUFFLE_ENEMIES
+from casino_data import LATE_PAIRS
 
 _NORMALS = ('Power','Ose','Rangda','Skadi','Narcissus','Dakini','Garuda',
             'Cerberus','Kali','Hanuman','Melchizedek','Moloch','Abaddon',
@@ -22,8 +23,6 @@ def _boss(name,hp,skills,sp=100):
         adaptation='Terminal-balanced phase; not original boss statistics.')
 
 for name,hp,skills in (
-    ('Casino Arena Guardian',460,['Rising Slash','Rakukaja','Zionga']),
-    ('Sae Leviathan',860,['Tempest Slash','Megido','Dekaja','Matarunda']),
     ('Politician Ooe',430,['Psio','Rakukaja','Rising Slash']),
     ('Former Noble',450,['Eiga','Tarunda','Tempest Slash']),
     ('TV Station President',470,['Freila','Marakukaja','Rising Slash']),
@@ -51,30 +50,16 @@ for name,hp,skills in (
     _boss(name,hp,skills)
 
 
-# Six regular Royal pairs are available by the early Casino hideout scene.
-# Queen/Noir unlock after Casino infiltration begins. Joker/Crow only in Lab
-# after the January 9 unlock (fscr0162_001_100). Joker/Violet needs a maxed
-# Faith Confidant and a subsequent hideout meeting, neither simulated here.
-_PRE_CASINO_PAIRS = (('Mona','Panther'),('Skull','Queen'),('Fox','Skull'),
-                     ('Fox','Panther'),('Noir','Mona'))
-_LATE_PAIRS = _PRE_CASINO_PAIRS + (('Queen','Noir'),)
-_LAB_PAIRS = _LATE_PAIRS + (('Joker','Crow'),)
-
-# Casino Crow is the Robin Hood phase, not the unlocked Loki training kit.
-_ROBIN_HOOD = dict(skills=['Kouga','Makouga','Eiga','One-shot Kill','Rakunda'],
-                   affinity={'Bless':'resist','Curse':'weak'})
+# Joker/Crow opens in the January story; Violet's Confidant requirement is not simulated.
+_LAB_PAIRS = LATE_PAIRS + (('Joker','Crow'),)
 
 
 def _n(id,title,mark,before,after,waves,*,hint=None,gate=None,mechanic=None,
        recruits=(),**extra):
     pairs = () if extra.get('party_size') == 1 else (
-        _PRE_CASINO_PAIRS if id == 'casino-service' else
         () if id == 'laboratory-reality' else
-        _LAB_PAIRS if id.startswith('laboratory-') else _LATE_PAIRS)
+        _LAB_PAIRS if id.startswith('laboratory-') else LATE_PAIRS)
     extra.setdefault('showtime_pairs',pairs)
-    if id.startswith('casino-'):
-        extra.setdefault('team_overrides',{'Crow':_ROBIN_HOOD})
-        extra.setdefault('forbidden_team',['Violet'])
     if id.startswith(('cruiser-','depths-')):
         extra['forbidden_team'] = ['Crow','Violet']
     return dict(id=id,title=title,map_mark=mark,brief=before,
@@ -84,35 +69,6 @@ def _n(id,title,mark,before,after,waves,*,hint=None,gate=None,mechanic=None,
         reward=dict(credits=400,joker_sp=3,**({'teammates':list(recruits)} if recruits else {})),
         story_gate=gate or {},mechanic=mechanic or {},**extra)
 
-CASINO = (
- _n('casino-service','Behind the Tables','CARD',
-    'Sae sees the courthouse as a casino: the house controls every verdict. The Thieves infiltrate the service corridors to obtain membership access.',
-    'The membership card opens the main floor. Akechi joins the operation as Crow, fighting with Robin Hood. The team follows the rigged games toward their control rooms.',
-    [['Power','Ose']],recruits=('Crow',)),
- _n('casino-rigging','Turn the House Against Itself','SLOTS',
-    'The dice tables and giant slot machine are rigged. Oracle traces the controls; the Thieves reach the panels and arrange their own jackpot.',
-    'The winnings buy the high-limit card. Access still depends on how Sae perceives the visitors, not just on their coin balance.',
-    [['Ose','Rangda'],['Skadi']],mechanic=dict(kind='narrated_controls',coins=50000)),
- _n('casino-darkness','Courtroom to High Limit','DARK',
-    'After visiting the real courthouse to change Sae\'s cognition, the team returns to high limit and navigates the House of Darkness.',
-    'The darkness trial is cleared. The next attraction demands that Joker enter alone.',
-    [['Rangda','Power'],['Skadi']],gate=dict(requires='real_world_courthouse_visit')),
- _n('casino-arena','The Unfair Arena','SOLO',
-    'Joker enters the Battle Arena alone. The casino changes the terms and sends successive opponents rather than honoring a fair contest.',
-    'Joker wins the arena prize. The team reunites at the bridge to the manager\'s floor.',
-    [['Ose'],['Power'],['Casino Arena Guardian']],party_size=1,
-    hint='Solo operation: bring healing and support on Joker; do not depend on a Baton Pass.'),
- _n('casino-bridge','A Million-Coin Toll','BRIDGE',
-    'Sae raises the bridge fee from one hundred thousand to one million coins. Akechi uses the casino\'s own card and coin rules to meet the demand.',
-    'The route to the treasure is secured. The calling card and heist follow the team\'s fixed plan, rather than an immediate attack.',
-    [['Skadi','Rangda']],gate=dict(requires='high_limit_trials_complete'),
-    mechanic=dict(kind='narrated_coin_loophole')),
- _n('casino-heist','Leviathan and the Escape','HEIST',
-    'On the planned heist, Sae becomes Leviathan. Her roulette is another rigged game. This terminal encounter compresses its exposure into a conventional boss battle.',
-    'Sae is defeated. Joker draws the pursuit and is captured; the interrogation and the team\'s deception lead into the hunt for Shido. This is not a routine treasure theft ending.',
-    [['Sae Leviathan']],gate=dict(requires='planned_calling_card_and_heist'),
-    mechanic=dict(kind='adapted_boss',not_implemented=['roulette','special_assignment'])),
-)
 CRUISER = (
  _n('cruiser-guests','A Ship for the Chosen','VIP',
     'Shido imagines Japan as a sinking world and his supporters as the passengers worth saving. A membership card leads to Ooe and the former noble, the first two recommendation holders.',
@@ -207,7 +163,6 @@ LABORATORY = (
 
 CHAPTERS = tuple(dict(id=id,title=title,brief=brief,completion=completion,nodes=nodes)
  for id,title,brief,completion,nodes in (
- ('casino','Sae\'s Casino','Beat a house built on rigged justice.','The arrest is part of a larger plan.',CASINO),
  ('cruiser','Shido\'s Cruiser','Gather five letters and confront the man at the helm.','The confession does not end the crisis.',CRUISER),
  ('depths','Mementos Depths','Challenge the prison and the god of control.','The original final conflict is resolved.',DEPTHS),
  ('laboratory','Maruki\'s Laboratory','Royal branch: reject a happiness imposed on everyone.','The Thieves choose their own tomorrow.',LABORATORY),

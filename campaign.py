@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phantom Campaign: independent, reconstructed offline curses campaign."""
+"""Persona 5 Terminal: independent, reconstructed offline curses campaign."""
 import argparse
 import curses as C
 import os
@@ -8,10 +8,13 @@ import textwrap
 import time
 from animation_gallery import AnimationGallery
 from reel_palette import install as install_scene_palette
+from title_scene import PRODUCT_TITLE, STARTUP_SECONDS, draw_startup, draw_title
 from battle_data import TEAM
 from battle_ui import BattleUI, RED, GOLD, CYAN, WHITE, DIM, GREEN, ENTER, ESC
 import campaign_data as content
 from campaign_combat import build_stage, stage_grade, stage_party
+from casino_route import CasinoRoute
+from palace_menu import Timeline, map_screen, brief_frame, transition_frame, airlock
 from campaign_state import DEFAULT_SAVE, Campaign, TestingCampaign, CampaignError
 
 VAULT_WORDS=('RICH','REAP','HUGE','GOLD')
@@ -49,6 +52,8 @@ class CampaignApp(BattleUI):
         self.grade=None;self.reward=None;self.error=None;self.finished=None
         self.story_visited=False;self.restore_focus=False
         self.gallery=None;self.gallery_return='title'
+        self.casino_route=None
+        self.palace_timeline=Timeline();self.airlock_started=None
 
     def put(self,y,x,t,color=WHITE,b=False,reverse=False):
         if 0<=y<self.h and 0<=x<self.w-1:
@@ -56,11 +61,19 @@ class CampaignApp(BattleUI):
             except C.error:pass
     def mid(self,y,t,color=WHITE,b=False):
         self.put(y,max(0,(self.w-len(t))//2),t,color,b)
-    def frame(self,title,footer):
-        self.put(1,2,'◆ TESTING MODE' if self.testing else '◆ PHANTOM CAMPAIGN',GOLD if self.testing else RED,True)
-        self.put(1,max(21,self.w-len(title)-3),title,CYAN,True)
-        for y in (2,self.h-3):self.put(y,2,'━'*(self.w-4),RED)
-        self.mid(self.h-2,footer,DIM)
+    def frame(self,title,footer,*,accent=None):
+        self.put(1,2,'◆ TESTING MODE' if self.testing else f'◆ {PRODUCT_TITLE}',GOLD if self.testing else RED,True)
+        self.put(1,max(21,self.w-len(title)-3),title,accent or CYAN,True)
+        self.put(2,2,'━'*(self.w-4),accent or RED)
+        if isinstance(footer,tuple):
+            # Two-line map controls stay completely inside the last visible
+            # cells. Leave the last terminal row unused; shorter window crops
+            # cannot erase the testing shortcuts.
+            for off,line in enumerate(footer):
+                self.mid(self.h-2-(len(footer)-1)+off,line,DIM)
+        else:
+            self.put(self.h-3,2,'━'*(self.w-4),accent or RED)
+            self.mid(self.h-2,footer,DIM)
     def lines(self,y,x,text,width=None,limit=4,color=WHITE):
         for j,line in enumerate(textwrap.wrap(str(text),width or self.w-6)[:limit]):self.put(y+j,x,line,color)
     def panel(self,title,heading,footer):
@@ -88,14 +101,13 @@ class CampaignApp(BattleUI):
         self.notice=('TEST SESSION' if self.testing else 'AUTOSAVED')+'  /  '+description
         return True,result
 
-    def title(self):
-        self.frame('','↑↓ SELECT  ↵ OPEN')
+    def title_options(self):
         ready=self.story.status=='ready'
-        self._b_list([('CONTINUE','',ready),('NEW GAME','',True),('TESTING MODE','',True),
-                      ('ANIMATION GALLERY','',True),('QUIT','',True)],8,5,self.w-10,5,self.i)
-        if self.i==2:self.mid(15,'Practice only. Story progress is not saved.',DIM)
-        elif self.i==0 and not ready:self.mid(15,'No readable campaign save.',DIM)
-        if self.notice:self.put(self.h-4,3,self.notice[:self.w-6],GOLD)
+        return [('CONTINUE','',ready),('NEW GAME','',True),('TESTING MODE','',True),
+                ('ANIMATION GALLERY','',True),('QUIT','',True)]
+
+    def title(self):
+        draw_title(self,self.title_options(),self.i,self.notice)
 
     def confirm(self):
         self.panel('SYSTEM / NEW GAME','START A NEW CAMPAIGN?','N CONFIRM NEW GAME  ESC KEEP CURRENT SAVE')
@@ -153,47 +165,20 @@ class CampaignApp(BattleUI):
                                  f'Try {correct+1} {rows[correct]}.')
 
     def transition(self):
-        next_ch=self.chapters[self.ch+1]
-        self.panel('CASE FILE / '+next_ch['id'].upper(),'◆ A NEW CASE  /  '+next_ch['title'].upper(),'ENTER OPEN MAP  ESC SKIP')
-        self.lines(8,3,next_ch.get('brief','A new Palace is open. Pick an operation from the map.'),limit=9)
+        transition_frame(self,self.chapters[self.ch+1],'ENTER OPEN MAP  ESC SKIP')
 
     def draw_map(self):
-        nodes=self.nodes();d=self.store.data;known=d['cleared']
-        complete=sum(n['id'] in known for n in nodes)
-        progress='' if self.testing else f'  /  {complete}/{len(nodes)} CLEARED'
-        self.panel('PALACE MAP',self.chapters[self.ch]['title'].upper()+progress,
-                   '←→ PALACE  ↑↓ PICK  ↵ BRIEF  S SQUAD  V VELVET')
-        self.mid(self.h-1,('G ANIMATION GALLERY  T CLASSIC TRIALS' if self.testing
-                           else 'H HELP  T CLASSIC TRIALS')+'  ESC TITLE',DIM)
-        tabs='  /  '.join(f'[ {self.label(i)} ]' if i==self.ch else self.label(i) for i in range(self.opened()))
-        if len(tabs)>self.w-6:
-            count=self.opened()
-            tabs=f'‹ {self.label((self.ch-1)%count)}  [ {self.label()} ]  {self.label((self.ch+1)%count)} ›  {self.ch+1}/{count}'
-        self.put(5,3,tabs,CYAN,True)
-        if not self.testing:self.put(6,3,'✓ Clear  ◆ Available  ▣ Locked',DIM)
-        wide=self.w>=92;split=self.w//2
-        for idx,n in enumerate(nodes):
-            ok=self.store.can_play(n['id']);done=not self.testing and n['id'] in known
-            mark='' if self.testing else '✓ ' if done else '◆ ' if ok else '▣ '
-            rank=f'  [{known[n["id"]]}]' if done and known.get(n['id']) else ''
-            y=8+idx*(2 if wide else 1);width=split-5 if wide else self.w-6
-            row=f'{"▶" if idx==self.pick else " "}  {idx+1:02}  {mark}{n["title"]}{rank}'
-            self.put(y,3,row[:width].ljust(width),GREEN if done else CYAN if ok else DIM,idx==self.pick,idx==self.pick)
-        x,y=(split+2,8) if wide else (3,15);n=nodes[self.pick];width=self.w-x-3
-        if self.store.can_play(n['id']):
-            self.lines(y,x,n.get('brief',''),width,4)
-        else:
-            prior=nodes[max(0,self.pick-1)]['title']
-            self.lines(y,x,'Clear '+prior+' first.',width,2,color=GOLD)
+        map_screen(self,time.monotonic())
 
     def brief(self):
         n=self.node
-        self.panel(self.label()+' / OPERATION BRIEF','◆ '+n['title'].upper(),
+        skin=brief_frame(self,self.chapters[self.ch]['id'],'◆ '+n['title'].upper(),
                    ('ENTER DIALS' if self.dials_required() else 'ENTER DEPLOY')+'  ESC MAP  S SQUAD  V VELVET')
         self.lines(6,3,(not self.testing and n.get('story_before')) or n.get('brief',''),limit=4)
-        self.put(10,3,(f'WAVES: {len(n["waves"])}   /   SQUAD: '+', '.join(['Joker',*stage_party(self.store,n)]))[:self.w-6],CYAN,True)
+        self.put(10,3,(f'WAVES: {len(n["waves"])}   /   SQUAD: '+', '.join(['Joker',*stage_party(self.store,n)]))[:self.w-6],
+                 skin.accent,True)
         self.lines(12,3,n.get('preview') or 'Opening formation: '+', '.join(n['waves'][0]),limit=3,color=DIM)
-        self.put(15,3,'TACTICS',GOLD,True)
+        self.put(15,3,'TACTICS',skin.accent,True)
         self.lines(16,3,n.get('hint',''),limit=self.h-20,color=WHITE)
 
     def dials_required(self):
@@ -247,10 +232,56 @@ class CampaignApp(BattleUI):
         try:b=build_stage(self.store,self.node['id'],self.seed)
         except (CampaignError,ValueError) as exc:self.notice='BLOCKED • '+str(exc);self.page='brief';return
         self.battle_init();self._b_battle=b
+        self.casino_route=CasinoRoute() if self.node.get('wave_breaks') else None
         self._b_personas=getattr(b,'personas',self._b_personas);self._b_screen='command'
         self._b_prepare_presentation(b,time.monotonic())
         self.finished=None;self.reward=None;self.error=None;self.grade=None;self.first=False
         self.notice='';self.page='battle'
+        self.airlock_started=time.monotonic() if self.node['id'].startswith('spaceport-') else None
+
+    def draw_casino_route(self):
+        route=self.casino_route
+        if route.leaving:
+            self.panel('CASINO / PAUSED','RETURN TO THE PALACE MAP?','ENTER CONFIRM  ESC STAY')
+            self.lines(8,3,'This attempt ends. Unfinished fights do not change campaign progress.')
+            return
+        heading={'dice':'DICE CONTROL ROOM','slots':'GIANT SLOT','darkness':'HOUSE OF DARKNESS'}[route.stage]
+        self.panel('CASINO / INFILTRATION',heading,'↑↓ SELECT  ↵ ACT  ESC LEAVE ATTEMPT')
+        if route.stage in ('dice','slots'):
+            self.put(6,3,f'COINS  {route.coins:,}',GOLD,True)
+        if route.stage=='slots':
+            self.mid(7,'[ 7 ]   [ 7 ]   [ 7 ]' if route.jackpot else '[   ]   [   ]   [   ]',
+                     GOLD if route.jackpot else DIM,True)
+        rows=route.rows()
+        self._b_list([(r.label,'',not r.block) for r in rows],9,3,self.w-6,len(rows),route.pick)
+        detail=route.notice or rows[route.pick].block
+        if detail:self.lines(16,3,detail,limit=3,color=GOLD if route.notice else DIM)
+
+    def key_casino_route(self,k):
+        route=self.casino_route
+        if route.leaving:
+            if k==ESC:route.leaving=False
+            elif k in ENTER:
+                self.casino_route=None;self._b_battle=None;self.page='map'
+                self.notice='ATTEMPT ENDED  /  Campaign save unchanged'
+            return
+        if k==ESC:route.leaving=True;return
+        rows=route.rows()
+        new_pick=self.nav(k,route.pick,len(rows))
+        if new_pick!=route.pick:
+            route.pick=new_pick;route.notice=''
+        choose=self.commit(k,route.pick,len(rows))
+        if choose is None:return
+        route.pick=choose
+        if not route.choose(rows[choose].id):return
+        b=self._b_battle
+        if route.stage=='slots':b._say('High Limit card acquired.')
+        b.resume_wave()
+        self._b_index=0
+        self._b_prepare_presentation(b,time.monotonic())
+        self.page='battle'
+        self.record()
+
     def record(self,retry=False):
         b=self._b_battle
         if b.phase not in ('win','loss') or (self.finished is not None and not retry):return
@@ -272,10 +303,15 @@ class CampaignApp(BattleUI):
             return
         self.record()
         now=time.monotonic()
+        if self._b_battle.phase=='interlude' and not self._b_result_animation(now):
+            self.casino_route.open(self._b_battle.interlude)
+            self.page='casino-route';self.draw_casino_route();return
         if (self.finished is not None and self._b_overlay is None and now-self.finished>=.68
                 and not self._b_result_animation(now)):
             self.page='result';self.result();return
         self.battle_page()
+        if self.airlock_started is not None and self._b_overlay is None and not self._b_cut_in:
+            airlock(self,now-self.airlock_started)
         self.record()
     def chapter_final(self):
         return self.node['id']==self.nodes()[-1]['id'] and all(n['id'] in self.store.data['cleared'] for n in self.nodes())
@@ -417,7 +453,8 @@ class CampaignApp(BattleUI):
             return False
         page=self.page
         if page=='title':
-            self.i=self.nav(k,self.i,5);choose=self.commit(k,self.i,5)
+            count=len(self.title_options())
+            self.i=self.nav(k,self.i,count);choose=self.commit(k,self.i,count)
             if choose==0:
                 status=self.story.reload()
                 if self.story.status=='ready':
@@ -467,7 +504,9 @@ class CampaignApp(BattleUI):
                 choose=self.commit(k,self.pick,len(self.nodes()))
                 if choose is not None:
                     self.pick=choose;n=self.nodes()[choose]
-                    if self.store.can_play(n['id']):self.node=n;self.page='brief';self.notice=''
+                    if self.store.can_play(n['id']):
+                        self.palace_timeline.cue(self.chapters[self.ch]['id'],choose,time.monotonic())
+                        self.node=n;self.page='brief';self.notice=''
                     else:self.notice='LOCKED • Finish the previous operation.'
                 elif old!=self.pick:self.notice=''
         elif page=='brief':
@@ -478,6 +517,7 @@ class CampaignApp(BattleUI):
                 if self.dials_required():self.page='dials';self.notice=''
                 else:self.stage()
         elif page=='dials':self.key_dials(k)
+        elif page=='casino-route':self.key_casino_route(k)
         elif page=='squad':
             names=['Joker',*TEAM];d=self.store.data
             if k==ESC:self.page=self.back;self.notice=''
@@ -578,19 +618,32 @@ class CampaignApp(BattleUI):
 
     def run(self):
         draw={'title':self.title,'confirm':self.confirm,'prologue':self.story_panel,'transition':self.transition,
+              'casino-route':self.draw_casino_route,
               'map':self.draw_map,'drill':self.draw_drill,'brief':self.brief,'dials':self.draw_dials,'squad':self.draw_squad,
               'velvet':self.draw_velvet,'fusion':self.draw_fusion,'registered':self.draw_registered,
               'replace':self.draw_replace,'cards':self.draw_cards,'battle':self.draw_combat,'result':self.result,
               'result-log':self.battle_page,'trials':self.battle_page,
               'gallery':lambda:self.gallery.draw(self)}
+        startup=True
+        started=None
         while True:
             self.s.erase();self.h,self.w=self.s.getmaxyx()
             small=self.h<25 or self.w<65
             if small:self.mid(self.h//2,'Widen the terminal to at least 65 × 25. Q quits.',GOLD)
-            else:draw[self.page]()
+            else:
+                if startup:
+                    now=time.monotonic()
+                    if started is None:started=now
+                    if now-started>=STARTUP_SECONDS:startup=False
+                    else:draw_startup(self,now-started)
+                if not startup:draw[self.page]()
             self.s.refresh()
             try:k=self.s.get_wch()
             except C.error:continue
+            if startup:
+                if k in ('q','Q'):return
+                if not small and k in (*ENTER,ESC,' '):startup=False
+                continue  # A skip is never sent to the live menu.
             if (not small or k in ('q','Q')) and not self.key(k):return
 
 def run_curses(s,store,seed):
@@ -609,7 +662,7 @@ def run_curses(s,store,seed):
     CampaignApp(s,store,seed).run()
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description='Play Phantom Campaign offline.')
+    p=argparse.ArgumentParser(description=f'Play {PRODUCT_TITLE} offline.')
     p.add_argument('--save',type=Path,default=Path(os.environ.get('PHANTOM_CAMPAIGN_SAVE',str(DEFAULT_SAVE))))
     p.add_argument('--seed',type=int,default=None,help=argparse.SUPPRESS)
     args=p.parse_args()

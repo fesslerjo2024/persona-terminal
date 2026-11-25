@@ -1,4 +1,4 @@
-# Phantom Campaign information baseline
+# Persona 5 Terminal information baseline
 
 ## Before adding anything to a screen
 
@@ -37,13 +37,23 @@ screen still makes sense without the line, leave it out.
 - **Rules and state:** battle_engine.py resolves turns. campaign_combat.py
   derives who actually deploys; the briefing uses that same function.
   campaign_state.py owns the versioned save schema and atomic writes.
-  Store only durable progress and loadout choices in saves. Testing state,
+  Store only durable progress and loadout choices in saves. Palace interludes
+  such as casino_route.py own temporary choices and coins, never save fields. Testing state,
   combat state, gallery selection and presentation cues are transient.
   Keep fields required by the decoder until a planned migration.
 - **Presentation:** campaign.py, battle_ui.py and animation_gallery.py
   format the values they receive. Don't infer rules from labels or repeat
   source facts in display caches. Use the same source for a value shown in
   more than one context. Show discovered affinities, not hidden resistances.
+- **Palace menus:** palace_menu.py owns common navigation, detail text and
+  briefing chrome. Palace theme modules render a frozen view of the
+  ordered operations; they do not calculate unlocks, accept input, or touch
+  saves. Art uses rows 6 through height minus 8. Preserve the shared
+  heading and selected-operation detail strip. Both map control rows belong
+  at height minus 3 and height minus 2; leave the final terminal row blank.
+- **Startup:** title_scene.py owns the calling card landing and title layout.
+  CampaignApp owns working title choices and dispatch; startup cannot dispatch
+  the key that skipped it.
 - **Cinematics:** cinema.py owns the playback registry, with timing from the
   native renderer. Battle and gallery share the renderer. The gallery owns
   preview-only entries; the engine emits actual combat events. Signature
@@ -51,8 +61,8 @@ screen still makes sense without the line, leave it out.
 
 ## Names and versions
 
-- Product: **Phantom Campaign**. Project folder: **Phantom-Campaign**.
-  Release download: **Phantom Campaign.zip**. Entry point: **campaign.py**.
+- Product: **Persona 5 Terminal**. Existing checkout: **Phantom-Campaign** (retained for launch compatibility).
+  Release download: **Persona 5 Terminal.zip**. Entry point: **campaign.py**.
   Default save: **campaign-save.json**.
 - Name source files after their role and use lower snake case. Name tests
   after what they verify. Keep weekdays, development phases and words like

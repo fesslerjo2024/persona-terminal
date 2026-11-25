@@ -15,7 +15,7 @@ ENEMY_DATA = deepcopy(ENEMIES)
 CHAPTERS = ()
 FUSIONS = ()
 
-for module in ('early_data','pyramid_data','spaceport_data','late_data'):
+for module in ('early_data','pyramid_data','spaceport_data','casino_data','late_data'):
     if find_spec(module) is None:
         continue  # An unfinished chapter module does not become playable.
     data = import_module(module)

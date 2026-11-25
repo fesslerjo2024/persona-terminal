@@ -17,6 +17,10 @@ class Clip:
     preview_only: bool = False
     hp: tuple[int, int] | None = None
 
+    @property
+    def duration(self):
+        return 2.0 if self.hp else cutins.duration(self.title)
+
 
 @dataclass(eq=False)
 class PreviewHP:
@@ -77,10 +81,10 @@ class AnimationGallery:
             if key == ESC:
                 self.started = None
                 self.reel = False
-            elif key in ENTER or key == ' ':
-                self._advance(now)
             elif key in ('r', 'R'):
                 self.started = now
+            elif key in ENTER or key == ' ':
+                self._advance(now)
             return True
         if key == ESC:
             return False
@@ -105,8 +109,7 @@ class AnimationGallery:
         now = time.monotonic() if now is None else now
         clip = self.clip
         if self.started is not None:
-            duration = 2.0 if clip.hp else cutins.duration(clip.title)
-            if now - self.started >= duration:
+            if now - self.started >= clip.duration:
                 self._advance(now)
                 clip = self.clip
         if self.started is None:

@@ -8,7 +8,6 @@ from animation_gallery import AnimationGallery
 from battle_ui import ESC
 from campaign import CampaignApp
 from campaign_state import Campaign
-from cutins import duration
 
 
 class Surface(CampaignApp):
@@ -61,7 +60,7 @@ class GalleryTests(unittest.TestCase):
             self.assertTrue(self.app.out)
             self.assertFalse(re.search(r'[A-Z]{3,}', ' '.join(self.app.out)))
             if c.hp:self.assertTrue(any('▓' in s for s in self.app.out))
-            now += 2.1 if c.hp else duration(c.title)+0.03
+            now += c.duration+0.03
             g.draw(self.app, now=now)
         self.assertEqual(titles, [c.title for _,group in g.groups for c in group])
         self.assertFalse(g.reel)
@@ -132,7 +131,7 @@ class GalleryTests(unittest.TestCase):
         shortcuts=[args for args,_ in draw.call_args_list
                    if 'G ANIMATION GALLERY' in str(args[2]) or 'T CLASSIC TRIALS' in str(args[2])]
         self.assertEqual(len(shortcuts),1)
-        self.assertEqual(shortcuts[0][0],self.app.h-1)
+        self.assertEqual(shortcuts[0][0],self.app.h-2)
         self.assertIn('ESC TITLE',shortcuts[0][2])
         self.app.key('t')
         self.assertEqual(self.app.page,'trials')

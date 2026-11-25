@@ -309,7 +309,9 @@ class BattleUI:
         wide=self.w>=91
         split=max(32,(self.w-1)//2)
         nav='↑↓ SELECT  ↵ CONFIRM'
-        if b.phase!='turn':
+        if b.phase=='interlude':
+            footer=''
+        elif b.phase!='turn':
             footer='↵ REMATCH  S SQUAD  L LOG  ESC MAP'
         elif self._b_screen=='command':
             restart='R RESET' if getattr(self,'page',None)=='trials' else 'R RETRY'
@@ -376,6 +378,9 @@ class BattleUI:
         top=9+max(len(b.allies)*ally_step,len(foes)*enemy_step)
         if self._b_outgoing:
             self._b_put(top,3,'WAVE CLEARED  /  NEXT FORMATION INCOMING',GOLD,True,width=self.w-6)
+            return
+        if b.phase=='interlude':
+            self._b_put(top,3,'WAVE CLEARED',GOLD,True,width=self.w-6)
             return
         if b.phase in ('win','loss'):
             self._b_result(top)

@@ -1,4 +1,4 @@
-# Phantom Campaign maintenance
+# Persona 5 Terminal maintenance
 
 Read INFORMATION_BASELINE.md before changing screen text, game data, or
 file names. Keep the default save and mission identifiers stable. Show one

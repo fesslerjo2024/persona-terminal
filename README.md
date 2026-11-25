@@ -1,4 +1,4 @@
-# Phantom Campaign
+# Persona 5 Terminal
 
 An offline Persona-inspired terminal campaign. See [Information Baseline](INFORMATION_BASELINE.md) for screen, data, and file naming rules.
 
@@ -12,6 +12,9 @@ an older save. Launching never renames or imports saves. The Testing Mode opens 
 chapter and uses only temporary in-memory state. The source archive contains
 no player save, passwords, or private workspace files.
 
+The Calling Card plays on launch and opens the live title menu. Press Enter,
+Space or Esc to skip straight to the menu without selecting an item.
+
 ## Campaign
 
 All nine story maps are represented: Castle, Museum, Bank, Pyramid, Spaceport,
@@ -22,12 +25,44 @@ terminal adaptations. Only discovered weaknesses are highlighted.
 The Bank dials are playable in Story. Signature scripted mechanics include
 Kamoshida's Trophy and charge, Piggytron's charge and one-use bait, Kaneshiro's
 bodyguard and dwindling cash, Wakaba's aerial phase and ballista, and the
-Spaceport robot shifts and charged attacks. Later route puzzles and scripted
+Spaceport robot shifts and charged attacks. Sae’s Casino now has a playable
+Members Floor route and a first House of Darkness pass. Later route puzzles and scripted
 boss twists may be narrated or represented by conventional waves in this
 checkpoint, rather than implemented exactly. See the chapter module headers
 for research and adaptation notes. The January chapter is exposed after the
 December finale in this fight-only app; the original calendar and social
 stat prerequisites aren’t simulated.
+
+### Palace menus
+Controls stay the same on all nine maps: Left/Right changes Palace and
+Up/Down or a number selects an operation. The map is a different object in
+each Palace: castle cross-section, framed exhibit wall, vault dial, tomb
+mural, factory dispatch, Casino elevator, boarding pass and deck plan,
+subway-to-prison record, or treatment terminal. Themed briefings keep the
+same deployment information. Presentation cues are brief and do not block
+input, unlock routes, or write saves. Both rows of map shortcuts sit above
+the terminal’s bottom edge. The Casino keeps its operation list in numerical
+order alongside the lift, whose moving cabin docks on its actual floor label.
+
+### Sae’s Casino
+The staff-only route uses two fights for the security keycard and members
+card. The Members Floor interludes let you turn the dice room against the
+house, follow Oracle’s red and green control leads, and exchange the giant
+slot jackpot for a High Limit card. These casino coins are local to the
+attempt, never spendable Velvet Room credits. The House of Darkness has a
+short locked-door/vent detour and its own exit attendant. Combat carries
+current squad HP, SP, and items across these breaks. The Battle Arena, bridge,
+and heist still use the earlier compact adaptation.
+
+References: [recorded Casino entry preview](https://www.bilibili.com/video/BV1214y1J7HP/),
+[recorded Royal palace run](https://www.youtube.com/watch?v=x5LDcdELNwo)
+(chapter timings 55:30 dice, 1:06:15 giant slot, 1:07:29 main terminal,
+1:10:33 green, 1:11:17 red, 1:29:20 House of Darkness), and
+[Royal’s field script index](https://mysh.dev/tools/persona/5r/files/dataR.cpk/script/field)
+(`fscr0157_006` through `fscr0157_013`). The original entry look was checked on video;
+the longer control sequence was checked against the game scripts, not from
+successful playback of the full recording. Combat lineup sizes, tactics,
+and payout steps are compressed for terminal pacing.
 
 ## Verification
 

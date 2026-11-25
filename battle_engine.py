@@ -83,6 +83,7 @@ class Battle:
    self.waves=[draw.sample(sorted(self.enemy_data),config['shuffle_count'])]
   self.wave_count=len(self.waves);self.wave=1
   self.round=1;self.cursor=-1;self.actor=None
+  self.interlude=None
   self._say(f'Trial entered: {encounter} // {difficulty}.')
   self._spawn();self._advance()
   if self._support_used:self._queue_cutin(ORACLE_SUPPORT)
@@ -164,14 +165,33 @@ class Battle:
   foes=[t for t in self.enemies if t.alive]
   joker=self.allies[0]
   return bool(self.phase=='turn' and self.one_more and self.actor and not self.actor.enemy and joker.alive and not joker.down and self.allout_fighters>=2 and foes and all(u.down for u in foes))
+ def _next_wave(self):
+  if self.wave==self.wave_count:
+   self.phase='win';self._say('Trial cleared. The Velvet Room awaits.')
+  else:
+   self.wave+=1;self.round=1;self._spawn()
  def _state(self):
+  if self.phase!='turn':return True
   if not self.allies[0].alive:
    self.phase='loss';self._say('Joker fell. Trial failed.');return True
   if not any(u.alive for u in self.enemies):
-   if self.wave==self.wave_count:
-    self.phase='win';self._say('Trial cleared. The Velvet Room awaits.');return True
-   self.wave+=1;self.round=1;self._spawn();return True
+   self.interlude=self.config.get('wave_breaks',{}).get(self.wave)
+   if self.interlude:
+    self.phase='interlude';self._finish_slot()
+    self.one_more=False;self.chain=0;self.passed=set();self._showtime=None
+   else:self._next_wave()
+   return True
   return False
+ def resume_wave(self):
+  """Resume a configured story break without resetting the squad's state."""
+  if self.phase!='interlude' or not self.interlude:
+   raise ValueError('There is no paused wave to resume.')
+  self.interlude=None;self.phase='turn'
+  self.damage_events.clear();self.cut_in=None;self.cut_in_queue.clear()
+  had_support=self._support_used
+  self._next_wave()
+  if self.phase=='turn':self._advance()
+  if not had_support and self._support_used:self._queue_cutin(ORACLE_SUPPORT)
  def _advance(self):
   self.one_more=False;self.chain=0;self.passed=set();self._showtime=None
   while self.phase=='turn':

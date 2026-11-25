@@ -1,4 +1,4 @@
-"""Isolated save data for the reconstructed Phantom campaign.
+"""Isolated save data for Persona 5 Terminal.
 
 Reading a Campaign never initializes or migrates a file. Only explicit state
 actions commit, and each action commits all changes or none. A TestingCampaign

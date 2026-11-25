@@ -64,6 +64,7 @@ def intent(b):
         return 'BIG BANG CHALLENGE incoming. Guard.' if 'pending' in st else 'EXECUTIVE DIRECTOR  /  Watch the charge.'
     if _active(b,'space-cognitive'):
         return 'SELF-DESTRUCT armed. Stop it or Guard.' if 'pending' in st else 'COGNITIVE HARU  /  Watch for Okumura’s order.'
+    if _active(b,'casino-snake') and 'pending' in st:return 'CONCENTRATE → MAZIONGA incoming. Guard before the shock.'
     return ''
 
 def special(b):
@@ -172,6 +173,21 @@ def enemy_step(b,a):
             if 'pending' not in st:b._hurt(a,a.hp)
             return done
         _charge(b,'Okumura orders Cognitive Haru to self-destruct.');return False
+    if behavior=='casino-snake':
+        done=_finish_charge(b,a,'Charged Mazionga','Electric',63)
+        if done is not None:return done
+        st['snake_turn']=st.get('snake_turn',0)+1
+        if a.hp*2<=a.max_hp and st['snake_turn']%3==0:
+            _charge(b,'Snake King concentrates. Charged Mazionga is coming.');return False
+        shocked=[u for u in _living(b.allies) if u.status=='shock']
+        if shocked:
+            target=min(shocked,key=lambda u:u.hp/u.max_hp+.45*u.guard)
+            return b._execute(a,dict(kind='damage',element='Physical',power=29,
+                                     target='enemy',accuracy=96),target,'Fang Strike')
+        if a.sp>=16:
+            a.sp-=16
+            return b._execute(a,SKILLS['Mazionga'],None,'Mazionga')
+        return _push(b,a,'Fang Strike','Physical',29)
     if behavior=='space-mammon':
         b._say('Okumura has no employees left to order around.')
         return False
