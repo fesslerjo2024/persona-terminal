@@ -13,7 +13,9 @@ from title_scene import PRODUCT_TITLE, STARTUP_SECONDS, draw_startup, draw_title
 import velvet_entrance
 import velvet_menu
 from battle_data import TEAM
-from battle_ui import BattleUI, RED, GOLD, CYAN, WHITE, DIM, GREEN, ENTER, ESC
+from battle_ui import RED, GOLD, CYAN, WHITE, DIM, GREEN, ENTER, ESC
+from suite_menu import SuiteMenu
+from terminal_surface import TerminalSurface
 import campaign_data as content
 from campaign_combat import build_stage, stage_grade, stage_party, solo_readiness
 from casino_route import CasinoRoute
@@ -42,7 +44,7 @@ DRILL=(
     ('BRACE FOR THE HIT','The King is winding up Royal Smash. Guard to reduce the damage.',COMMANDS,4),
 )
 
-class CampaignApp(BattleUI):
+class CampaignApp(TerminalSurface):
     def __init__(self,screen,store,seed=None):
         self.s=screen;self.store=self.story=store;self.seed=seed
         self.chapters=tuple(content.CHAPTERS)
@@ -58,14 +60,9 @@ class CampaignApp(BattleUI):
         self.casino_route=None
         self.velvet_started=None
         self.departure=None
+        self.back_to_suite=False
         self.palace_timeline=Timeline();self.airlock_started=None
 
-    def put(self,y,x,t,color=WHITE,b=False,reverse=False):
-        if 0<=y<self.h and 0<=x<self.w-1:
-            try:self.s.addnstr(y,x,str(t),self.w-1-x,C.color_pair(color)|(C.A_BOLD if b else 0)|(C.A_REVERSE if reverse else 0))
-            except C.error:pass
-    def mid(self,y,t,color=WHITE,b=False):
-        self.put(y,max(0,(self.w-len(t))//2),t,color,b)
     def frame(self,title,footer,*,accent=None):
         self.put(1,2,'◆ TESTING MODE' if self.testing else f'◆ {PRODUCT_TITLE}',GOLD if self.testing else RED,True)
         self.put(1,max(21,self.w-len(title)-3),title,accent or CYAN,True)
@@ -112,7 +109,7 @@ class CampaignApp(BattleUI):
                 ('ANIMATION GALLERY','',True),('QUIT','',True)]
 
     def title(self):
-        draw_title(self,self.title_options(),self.i,self.notice)
+        draw_title(self,self.title_options(),self.i,self.notice,back=self.back_to_suite)
 
     def confirm(self):
         self.panel('SYSTEM / NEW GAME','START A NEW CAMPAIGN?','N CONFIRM NEW GAME  ESC KEEP CURRENT SAVE')
@@ -744,7 +741,8 @@ class CampaignApp(BattleUI):
                 self.page='map';self.notice=''
         return True
 
-    def run(self):
+    def run(self,*,back_to_suite=False):
+        self.back_to_suite=back_to_suite
         draw={'title':self.title,'confirm':self.confirm,'prologue':self.story_panel,'transition':self.transition,
               'casino-route':self.draw_casino_route,
               'map':self.draw_map,'drill':self.draw_drill,'brief':self.brief,'dials':self.draw_dials,'squad':self.draw_squad,
@@ -784,9 +782,10 @@ class CampaignApp(BattleUI):
                 if k in ('q','Q'):return
                 if not small and k in (*ENTER,ESC,' '):startup=False
                 continue  # A skip is never sent to the live menu.
-            if (not small or self.departure is not None or k in ('q','Q')) and not self.key(k):return
+            if not small and back_to_suite and k==ESC and self.page=='title':return True
+            if (not small or self.departure is not None or k in ('q','Q')) and not self.key(k):return False
 
-def run_curses(s,store,seed):
+def run_curses(s,save,seed,direct=False):
     try:C.curs_set(0)
     except C.error:pass
     C.start_color()
@@ -799,12 +798,16 @@ def run_curses(s,store,seed):
     # Distinguish a lone Esc from an arrow sequence without a full-second wait.
     if 'ESCDELAY' not in os.environ:C.set_escdelay(55)
     s.keypad(True);s.timeout(80)
-    CampaignApp(s,store,seed).run()
+    def open_persona5():
+        return CampaignApp(s,Campaign(save),seed).run(back_to_suite=not direct)
+    if direct:open_persona5()
+    else:SuiteMenu(s).run(open_persona5)
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=f'Play {PRODUCT_TITLE} offline.')
+    p=argparse.ArgumentParser(description='Open the offline Persona terminal suite.')
+    p.add_argument('--persona5',action='store_true',help='Skip the suite picker and open Persona 5 directly.')
     p.add_argument('--save',type=Path,default=Path(os.environ.get('PHANTOM_CAMPAIGN_SAVE',str(DEFAULT_SAVE))))
     p.add_argument('--seed',type=int,default=None,help=argparse.SUPPRESS)
     args=p.parse_args()
-    try:C.wrapper(run_curses,Campaign(args.save),args.seed)
+    try:C.wrapper(run_curses,args.save,args.seed,args.persona5)
     except KeyboardInterrupt:pass

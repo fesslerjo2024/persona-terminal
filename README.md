@@ -1,6 +1,6 @@
 # Persona 5 Terminal
 
-An offline Persona-inspired terminal campaign. See [Information Baseline](INFORMATION_BASELINE.md) for screen, data, and file naming rules.
+An offline Persona terminal suite, with Persona 5 as the playable campaign. See [Information Baseline](INFORMATION_BASELINE.md) for screen, data, and file naming rules.
 
 Run from the extracted directory with Python and a curses terminal:
 
@@ -12,8 +12,16 @@ an older save. Launching never renames or imports saves. The Testing Mode opens 
 chapter and uses only temporary in-memory state. The source archive contains
 no player save, passwords, or private workspace files.
 
-The Calling Card plays on launch and opens the live title menu. Press Enter,
-Space or Esc to skip straight to the menu without selecting an item.
+The launch picker offers Persona 3, Persona 4, and Persona 5. Use the arrow
+keys and Enter, press 3–5, or click a card in mouse-enabled terminals.
+The Dark Hour Clock, Tube TV, and Tumbling Card animate when highlighted
+or activated.
+Persona 3 has its own animated title preview. Continue and New Game are
+disabled; Back to Selector or Esc returns to the picker.
+Persona 4 is unavailable. Persona 5 runs the original Calling Card intro and
+working campaign. Esc at its title returns to the picker. Use
+`python3 campaign.py --persona5` to bypass the picker, including in existing
+automation. Enter, Space, or Esc skips an intro without selecting anything.
 
 ## Campaign
 

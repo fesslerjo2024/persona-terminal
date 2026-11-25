@@ -49,7 +49,7 @@ def draw_startup(app, elapsed):
     app.draw_scene_rows(rows)
 
 
-def draw_title(app, menu, index, notice=''):
+def draw_title(app, menu, index, notice='', *, back=False):
     rows, top, left, span = _landed(app.w-1, app.h)
     app.draw_scene_rows(rows)
     app.put(top+2, left+4, PRODUCT_TITLE, IDS['rose'], True)
@@ -68,4 +68,4 @@ def draw_title(app, menu, index, notice=''):
         app.mid(app.h-4, 'Practice only. Story progress is not saved.', DIM)
     elif not menu[index][2]:
         app.mid(app.h-4, 'No readable campaign save.', DIM)
-    app.mid(app.h-2, '↑↓ SELECT  ↵ OPEN', RED)
+    app.mid(app.h-2, '↑↓ SELECT  ↵ OPEN  ESC TITLES' if back else '↑↓ SELECT  ↵ OPEN', RED)
