@@ -1,6 +1,6 @@
-# Phantom Campaign — weekend reconstruction
+# Phantom Campaign — Friday checkpoint + cinematic reel
 
-This is a separate recreation and expansion built after the verified Bank build
+This checkpoint is from the separate recreation built after the verified Bank build
 was missing from the restored cloud workspace. **It is not the exact Bank
 rollback.** It does not change the surviving original Phantom Link source and
 does not use the old campaign save by default. No remote or network access is
@@ -11,7 +11,7 @@ Run from the extracted directory with Python and a curses terminal:
     python3 campaign.py
 
 The minimum terminal is 65×25. Start a separate playthrough using
-`python3 campaign.py --save my-weekend-save.json`. Avoid using this option
+`python3 campaign.py --save my-friday-save.json`. Avoid using this option
 with a story save from another build. The Testing Mode opens every populated
 chapter and uses only temporary in-memory state. The source archive contains
 no player save, passwords, or private workspace files.
@@ -45,7 +45,19 @@ Use Left/Right for categories, Up/Down to select, and Enter to preview.
 Press **P** to play all clips in order, **R** to replay, or **Esc** to back out.
 Gallery previews do not read or alter battle progress.
 
-**Showtimes → 6 Palace Body Slam** is a full ASCII scene: ring entrance,
-Queen’s lariat, Noir’s dropkick, the double dive and the referee’s count.
-The same scene plays for Queen and Noir’s Showtime in combat. Enter, Space,
-or Esc skips the cut-in without skipping damage.
+The eight Showtimes are full original ASCII scenes. **All-Out Attacks** has
+nine animated character finishers; Futaba's UFO finisher is under
+**Oracle Support → 3**. Moral Support, Final Guard and both HP effects remain
+separate clips. Final Guard is a preview only in this build.
+
+The game uses the same scenes in eligible fights. Enter, Space or Esc skips
+the cut-in without replaying or cancelling damage. The animation pack does
+not change unlocks, battle rules, damage or save data.
+
+Art references: [Royal Showtime gameplay](https://www.youtube.com/watch?v=NzZLv8X2sJA),
+[Queen & Noir gameplay](https://www.youtube.com/watch?v=Dv9JIJk7t7E),
+[Royal All-Out gameplay compilation](https://www.youtube.com/watch?v=8-tIjvQjXS8),
+[ATLUS Futaba spotlight](https://p-ch.jp/news/3885/) and
+[Royal Oracle gameplay](https://www.youtube.com/watch?v=W3J4rSjfgeE).
+All character-cell art was drawn for this app; no game images, video or audio
+are bundled.

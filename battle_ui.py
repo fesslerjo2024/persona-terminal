@@ -3,7 +3,8 @@ import curses as C
 import textwrap
 import time
 from cutins import CUTIN_SECONDS, duration as cutin_duration, look as cutin_look
-import wrestling_scene
+import cinema
+from wrestling_scene import HEIGHT as SCENE_ROWS, WIDTH as SCENE_COLUMNS
 
 RED,GOLD,CYAN,WHITE,DIM,GREEN=range(1,7)
 ENTER=(C.KEY_ENTER,'\r','\n')
@@ -540,22 +541,29 @@ class BattleUI:
 
     def draw_cutin(self,title,subtitle,elapsed=0.0,footer='ENTER / ESC SKIP'):
         """Draw one timing-independent frame, for combat or a gallery preview."""
-        if title == wrestling_scene.TITLE:
-            self.frame('SHOWTIME // RINGSIDE',footer)
-            beat,rows=wrestling_scene.render(elapsed)
+        kind,cast,motif,tokens,palette=cutin_look(title)
+        scene=cinema.get(title)
+        if scene:
+            if kind=='SHOWTIME':
+                heading='SHOWTIME // RINGSIDE' if title=='PALACE BODY SLAM' else 'PHANTOM LINK // SHOWTIME'
+            else:
+                heading='PHANTOM LINK // ALL-OUT ATTACK'
+            self.frame(heading,footer)
+            beat,rows=scene[1](elapsed)
             inks={'queen':CYAN,'noir':GOLD,'foe':RED,'rope':DIM,
-                  'rail':RED,'face':WHITE,'dim':DIM,'flash':GOLD}
-            left=(self.w-wrestling_scene.WIDTH)//2
-            top=(self.h-wrestling_scene.HEIGHT-4)//2+1
-            self.mid(top-2,title+'  /  QUEEN x NOIR',WHITE,True)
+                  'rail':RED,'face':WHITE,'dim':DIM,'flash':GOLD,
+                  'red':RED,'gold':GOLD,'cyan':CYAN,'green':GREEN,'white':WHITE}
+            left=(self.w-SCENE_COLUMNS)//2
+            top=(self.h-SCENE_ROWS-4)//2+1
+            caption=title+'  /  '+cast.replace('×','x') if kind=='SHOWTIME' else title
+            self.mid(top-2,caption,WHITE,True)
             for y,row in enumerate(rows,top):
                 x=left
                 for run,ink in row:
-                    if run.strip():self._b_put(y,x,run,inks[ink],ink in ('queen','noir','face','flash'))
+                    if run.strip():self._b_put(y,x,run,inks[ink],ink not in ('dim','rope'))
                     x+=len(run)
             self.mid(top+len(rows),beat,GOLD,True)
             return
-        kind,cast,motif,tokens,palette=cutin_look(title)
         accent={'red':RED,'gold':GOLD,'cyan':CYAN,'green':GREEN}[palette]
         step=min(4,int(max(0.0,elapsed)*5/CUTIN_SECONDS))
         center=self.h//2

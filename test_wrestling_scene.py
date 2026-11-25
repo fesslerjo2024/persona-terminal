@@ -50,7 +50,7 @@ class WrestlingSceneTests(unittest.TestCase):
             g.draw(app,now=SECONDS+.01)
             self.assertIsNone(g.started)
             self.assertEqual(save.read_bytes(),before)
-            self.assertEqual(duration(showtime(('Mona','Panther'))[0]),CUTIN_SECONDS)
+            self.assertGreater(duration(showtime(('Mona','Panther'))[0]),CUTIN_SECONDS)
 
     def test_real_showtime_skip_preserves_single_impact(self):
         pair = ('Queen','Noir')

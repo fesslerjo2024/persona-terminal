@@ -24,15 +24,14 @@ class PreviewHP:
 def catalog():
     order = tuple(cutins.ALL_OUT)
     return (
-        ('SHOWTIMES', tuple(Clip(*card, ' + '.join(n for n in order if n in pair)
-                                 + (' / full ASCII scene' if card[0] == cutins.wrestling_scene.TITLE else ''))
+        ('SHOWTIMES', tuple(Clip(*card, ' + '.join(n for n in order if n in pair) + ' / ASCII scene')
                             for pair, card in cutins.SHOWTIMES.items())),
-        ('ALL-OUT ATTACKS', tuple(Clip(*card, name + ' finisher')
+        ('ALL-OUT ATTACKS', tuple(Clip(*card, name + ' / animated finisher')
                                   for name, card in cutins.ALL_OUT.items())),
         ('ORACLE SUPPORT', (
             Clip(*cutins.ORACLE_SUPPORT, 'Futaba / squad support'),
             Clip(*cutins.FINAL_GUARD, 'Futaba / protects against a fatal hit'),
-            Clip(*cutins.ORACLE, 'Futaba / aerial All-Out Attack'),
+            Clip(*cutins.ORACLE, 'Futaba / animated aerial All-Out Attack'),
         )),
         ('BATTLE EFFECTS', (
             Clip('DAMAGE FLASH', 'Lost HP flashes red and drains to the new total.', 'HP bar / normal damage', (100, 56)),

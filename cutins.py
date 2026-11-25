@@ -1,6 +1,6 @@
 """Original terminal cut-ins; no game artwork or dialogue is bundled."""
 
-import wrestling_scene
+import cinema
 
 ALL_OUT = {
     'Joker':   ('JOKER // CURTAIN CALL', 'The wildcard closes the case.'),
@@ -39,7 +39,8 @@ CUTIN_SECONDS = 1.22
 
 
 def duration(title):
-    return wrestling_scene.SECONDS if title == wrestling_scene.TITLE else CUTIN_SECONDS
+    scene = cinema.get(title)
+    return scene[0] if scene else CUTIN_SECONDS
 
 PAIR_STYLES = {
     'ROSE & REVOLVER':        ('MONA × PANTHER', 'ROSE / RICOCHET', ('✦', '◆', '✧'), 'red'),
