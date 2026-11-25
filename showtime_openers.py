@@ -6,7 +6,7 @@ stills: https://www.lp.zone/t/colors-flying-high-lets-play-persona-5-royal/3971?
 and page=13. These are adaptations, not shipped sprites or quoted dialogue.
 """
 from bisect import bisect_right
-from math import sin, pi
+from math import cos, sin, pi
 from wrestling_scene import Canvas
 
 _HERO = {
@@ -29,13 +29,6 @@ _HERO = {
         (r'__\[<>]====>',r'   /##\    ',r' _/    \_  '),
         (r' \\[<>]\\  ',r'   /##\    ',r'  <_  _>   '))),
 }
-_PORTRAIT = {
-    'mona': (r'    /\          /\ ',r'   /  \________/  \ ',r'  / .-.        .-. \ ',r' / ( O )      ( O ) \ ',r' \       -v-      /',r'  \___\___/\___/_/ ',r'      ==~~~==>>'),
-    'panther': (r'   /\_.-------._/\ ',r'  //  ///   \\\  \\ ',r' /=  [\]   [/]  =\ ',r' |\\    <v>     //|',r'  \ \___--___/ / ',r'   )  /}{\   ( ',r'  /__/####\___\ '),
-    'queen': (r'    .-----------.',r'   /  /////  ////\ ',r'  | [============]|',r'  |  \==  [] ==/ |',r'   \____v__v____/ ',r'   / ^[######]^ \ ',r'  /_/ |######| \_\ '),
-    'skull': (r'     _^^^^^_     ',r'   _/^^^^^^^\_  ',r'  /  [=] [=]  \ ',r'  |    /_\    | ',r'   \__W_W_W__/ ',r'   _/__|X|__\_  ',r' _/___/|X|\___\_'),
-    'fox': (r'   /\        /\  ',r'  /  \______/  \ ',r' | . /_    _\ . |',r'  \ [o]    [o] / ',r'   \_    V   _/  ',r'     \__u___/ ',r'     /<>##<>\  '),
-}
 _SHADOW = (r'  /\ /\ ',r' < * * >',r'  \_M_/ ',r'_/[(@)]\_',r'  | @ |  ',r' _/   \_ ')
 
 def _character(c,name,x,y,pose=0,back=False):
@@ -48,22 +41,6 @@ def _character(c,name,x,y,pose=0,back=False):
     width=max(map(len,rows))
     for i,row in enumerate(rows):
         c.put(x,y+i,row.ljust(width),'face' if i<len(head) else ink,opaque=True)
-
-def _center(c,y,s,ink,opaque=False):
-    c.put((57-len(s))//2,y,s,ink,opaque)
-
-def _cast(c,a,b,livery):
-    c.put(0,2,('/ ' if livery!='gold' else '= ')*28,livery)
-    c.put(0,12,(r'\ ' if livery!='gold' else '= ')*28,livery)
-    c.put(6,3,_PORTRAIT[a],_HERO[a][0],opaque=True)
-    c.put(32,3,_PORTRAIT[b],_HERO[b][0],opaque=True)
-    c.put(26,6,' & ','face',opaque=True)
-    c.put(8,11,'[ '+a.upper()+' ]',_HERO[a][0],opaque=True)
-    c.put(34,11,'[ '+b.upper()+' ]',_HERO[b][0],opaque=True)
-
-def _plate(c, title, left, right, ink):
-    _center(c,0,'[ '+left.upper()+' / '+right.upper()+' ]','face',True)
-    _center(c,13,'<==  '+title+'  ==>',ink,True)
 
 def _shot(beats,elapsed):
     ends=tuple(t for t,_ in beats)
@@ -78,9 +55,18 @@ def _particles(c,t,seed,count,xmin,xmax,ymin,ymax,ink,chars):
         y=ymin+(i*7+seed+int(t*(3+i%2)))%(ymax-ymin)
         c.put(x,y,chars[i%len(chars)],ink)
 
-def _crash(c,x,y,word,ink='flash'):
+def _crash(c,x,y,ink='flash'):
     c.put(x,y,(r'       \  |  /',r'  ----- \ | / -----',
-               ' >>   [ '+word+' ]   <<',r'  ----- / | \ -----',r'       /  |  \ '),ink,opaque=True)
+               ' >>   [ *#* ]   <<',r'  ----- / | \ -----',r'       /  |  \ '),ink,opaque=True)
+
+def _fallout(c,f,x,y,ink,marks):
+    """Throw drifting debris and let it settle into the stage art."""
+    for j in range(15):
+        rad=f*(3+j%7)
+        dx=int(rad*cos((j*11)%29))
+        dy=int(rad*sin((j*17)%29)+f*f*5)
+        if j%5/5>f-.32:
+            c.put(x+dx+j%5,y+dy,marks[j%len(marks)],ink)
 
 _ROSE = ((1.08,'01 / FLOWER FIELD'),(2.12,'02 / MONA OFFERS A ROSE'),
          (3.08,'03 / PANTHER TURNS'),(4.45,'04 / CROSSFIRE'),
@@ -98,8 +84,10 @@ def _meadow(c,t):
 def rose(elapsed):
     i,f,t=_shot(_ROSE,elapsed); c=Canvas();_meadow(c,t)
     if i==0:
-        _cast(c,'mona','panther','red')
-        _center(c,1,'[ A FIELD OF FLOWERS ]','face',True)
+        _character(c,'mona',3+int(f*6),6+int(f*9)%2)
+        _character(c,'panther',34-int(f*5),4+int(f*4)%2,0,True)
+        c.put(48-int(f*7),5,_SHADOW,'foe',True)
+        c.put(13+int(f*5),8,r'--{@}', 'red')
     elif i==1:
         _character(c,'mona',9+int(f*8),6,1)
         _character(c,'panther',29-int(f*3),4,0,True)
@@ -126,12 +114,15 @@ def rose(elapsed):
         c.put(x-7,y+1,'. . .','dim')
     elif i==5:
         _character(c,'mona',9,6);_character(c,'panther',20,4)
-        _crash(c,31,4,'B L O O M')
+        _crash(c,33,4)
         _particles(c,t,19,29,34,57,1,12,'red','@*+')
     else:
-        _cast(c,'mona','panther','red')
-        _plate(c,'ROSE & REVOLVER','mona','panther','red')
-        c.put(24,10,'{@}---','red',True)
+        _character(c,'mona',9+int(f*5),6-int(sin(pi*f)*2),2 if f<.48 else 0)
+        _character(c,'panther',20+int(f*5),4,0, f>.62)
+        c.put(42,9,(r' ___.-*.__',r'//_(@)_\_'), 'foe',True)
+        _fallout(c,f,43,4,'red','@*+.')
+        _particles(c,t,17,15,34,57,4,12,'gold','...*')
+        c.put(20+int(f*3),9,'{@}--','red',True)
     return _ROSE[i][1],c.finish()
 
 _ROAD = ((1.06,'01 / DUST ON THE HORIZON'),(2.00,'02 / SKULL WINDS UP'),
@@ -150,8 +141,10 @@ def _desert(c,t):
 def road(elapsed):
     i,f,t=_shot(_ROAD,elapsed); c=Canvas();_desert(c,t)
     if i==0:
-        _cast(c,'skull','queen','gold')
-        _center(c,1,'[ THE WASTELAND ]','face',True)
+        _character(c,'skull',7+int(f*5),4+int(f*8)%2,0 if f<.76 else 1)
+        _character(c,'queen',2+int(f*3),5,0)
+        c.put(48-int(f*9),5,_SHADOW,'foe',True)
+        c.put(17+int(f*6),11,'. . ~', 'gold')
     elif i<=2:
         x=12+int(f*(5 if i==1 else 12))
         _character(c,'skull',x,4,0 if i==1 and f<.58 else 1)
@@ -174,12 +167,14 @@ def road(elapsed):
     elif i==5:
         _character(c,'skull',10,5)
         _character(c,'queen',23,3,2)
-        _crash(c,32,4,'K R A K')
+        _crash(c,37,4)
         _particles(c,t,7,22,36,57,1,12,'gold','.*-')
     else:
-        _cast(c,'skull','queen','gold')
-        _plate(c,'HIGHWAY TO TROUBLE','skull','queen','gold')
-        _center(c,10,'[ ROAD CLEARED ]','face',True)
+        _character(c,'skull',10+int(f*5),5,1 if f<.4 else 0)
+        _character(c,'queen',23+int(f*6),3+int(f*2),2 if f<.35 else 0)
+        c.put(43+int(f*4),8,(r' /\____',r'/_/(@)\_'), 'foe',True)
+        _fallout(c,f,44,4,'gold','.-*~')
+        _particles(c,t,11,12,37,57,7,13,'dim','.~')
     return _ROAD[i][1],c.finish()
 
 
@@ -193,13 +188,12 @@ def _bowl(c,x,y,ink='gold'):
 
 def _shop(c,t,broken=False):
     c.put(0,1,'+'+'-'*55+'+','rail')
-    _center(c,1,"[ FOX'S BEEF BOWL ]",'gold',True)
     for x in (4,16,28):
         c.put(x,2,('  |  ',r' /-\ ','(===)',r' \_/ '),'red',True)
     for x in (3,36):
         c.put(x,6,'|'+'='*11+'|','dim')
     door=(r'/\ /\ /\ ',r'\ \\// /',r' \\// / ',r' ./ __ .',r'//_ / //',r'/    \\ ') if broken else (
-        '+-----+','|OPEN |','|  o  |','|     |','|     |','+-----+')
+        '+-----+','|     |','|  o  |','|     |','|     |','+-----+')
     c.put(46,3,door,'rail',True)
     c.put(0,10,'_'*56,'rail')
     c.put(0,12,'='*56,'gold')
@@ -208,15 +202,16 @@ def _shop(c,t,broken=False):
         c.put(20+k*3,4-int(t*5+k)%3,'~','dim')
 
 def beef(elapsed):
-    i,f,t=_shot(_BEEF,elapsed);c=Canvas();_shop(c,t,i>=2 and i<6)
+    i,f,t=_shot(_BEEF,elapsed);c=Canvas();_shop(c,t,i>=2)
     if i==0:
-        _cast(c,'fox','skull','red')
-        _center(c,0,'[ DINNER FOR TWO ]','face',True)
+        _character(c,'fox',10,3,0 if f<.5 else 2)
+        _character(c,'skull',38-int(f*7),4+int(f*9)%2,0,True)
+        _bowl(c,19+int(f*2),6)
+        c.put(22+int(f*2),5,'~','white')
     elif i==1:
         _character(c,'fox',10,3)
         _character(c,'skull',31,4,0,True)
         _bowl(c,20+int(f*8),6)
-        c.put(11,12,'  COUNTER  ','rail',True)
     elif i==2:
         x=46-int(f*10)
         c.put(x,4,_SHADOW,'foe',True)
@@ -246,12 +241,15 @@ def beef(elapsed):
     elif i==5:
         _character(c,'skull',7,5)
         _character(c,'fox',17,4,1)
-        _crash(c,33,3,'K A - B O W L')
+        _crash(c,35,3)
         _particles(c,t,14,22,31,57,1,11,'red','.*+')
     else:
-        _cast(c,'fox','skull','red')
-        _plate(c,'MIDNIGHT TAKEOUT','fox','skull','gold')
-        _bowl(c,25,8)
+        _character(c,'fox',17+int(f*3),4,1 if f<.32 else 2)
+        _character(c,'skull',7+int(f*3),5,0 if f<.66 else 2)
+        c.put(44,9,(r' /_.---._',r'/_/(@)\_'), 'foe',True)
+        _bowl(c,27-int(f*9),7-int(sin(pi*f)*2))
+        _fallout(c,f,45,4,'gold','/.+*')
+        _particles(c,t,24,10,30,57,5,12,'dim','~..')
     return _BEEF[i][1],c.finish()
 
 SCENES = {

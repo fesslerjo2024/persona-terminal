@@ -14,13 +14,13 @@ from wrestling_scene import Canvas, WIDTH
 MASK = 'TWO SIDES OF THE MASK'
 WALTZ = 'THE LAST WALTZ'
 MASK_BEATS = (
-    (.98, '01 / THUNDER OVER TOKYO'),
+    (.86, '01 / THUNDER OVER TOKYO'),
     (1.83, '02 / CROW: BERSERK'),
     (2.95, '03 / TWO LEVELS OF ATTACK'),
     (3.80, '04 / JOKER: THE KNIFE DROPS'),
     (5.35, '05 / CROW: BLADE FRENZY'),
     (6.27, '06 / ONE SHOT IN THE RAIN'),
-    (7.80, '07 / TWO SIDES OF THE MASK'),
+    (7.30, '07 / INTO THE RAIN'),
 )
 WALTZ_BEATS = (
     (.95, '01 / THE CHAPEL DOORS'),
@@ -29,7 +29,7 @@ WALTZ_BEATS = (
     (4.29, '04 / KASUMI REACHES BACK'),
     (5.83, '05 / PAS DE DEUX'),
     (6.49, '06 / THE CROSSING BLADES'),
-    (8.35, '07 / THE LAST WALTZ'),
+    (7.98, '07 / CATCH AND DIP'),
 )
 
 # Rows are drawn in separate inks, so identities are readable in both color and
@@ -77,44 +77,6 @@ BODIES = {
         'reel': ('<<\\[##]/|', '   [##] / ', '   <##>   ', '  /_/\\_', ' _/    >'),
     },
 }
-PORTRAITS = {
-    'crow': (
-        r'     .^--------^.',
-        r'   _/##/  //##_',
-        r'  /##_/##/##_/## ',
-        r'  |####[ >  < ]####|',
-        r'   ######/######/>',
-        r'    #####==#####/',
-        r' ^__/ ########/ __^',
-        r'/####___==__/_/#### ',
-    ),
-    'joker': (
-        r'     .-~~-~.',
-        r'  ._//////~\ ',
-        r' / /////////_  ',
-        r'|  <___/___/>|',
-        r'    v   v    /',
-        r'  ____--____/',
-        r'__/\:::///__',
-        r' /  _:::_/   ',
-    ),
-    'violet': (
-        r'    __ <> __',
-        r'  .~  ~/~  ~.',
-        r' /  ~~    ~~   ',
-        r'|  (__/__/)  |',
-        r' _   v  v   _/)',
-        r'   __ ~~ __/ ~~',
-        r'   __/>==<__',
-        r'  / /   /   ',
-    ),
-}
-
-
-def _center(c, y, s, ink='face', opaque=False):
-    c.put((WIDTH-len(s))//2, y, s, ink, opaque)
-
-
 def _flip(row):
     return row[::-1].translate(str.maketrans('/\\<>()[]{}', '\\/><)(][}{'))
 
@@ -174,7 +136,8 @@ def _roof(c, t, flash=False):
     for x in (2,17,40,49):
         c.put(x, 9, (' .----. ', '/_::::_\\', '|_____|'), 'rope')
     c.put(0, 12, '+'+'='*(WIDTH-2)+'+', 'rail')
-    c.put(0, 13, ' |//      R O O F T O P   /   S T O R M      \\\\| '.center(WIDTH), 'rope')
+    c.put(0, 13, '|' + ''.join(':' if (i+tick//3)%12==0 else ' '
+                               for i in range(WIDTH-2)) + '|', 'rope')
     c.put(0, 14, '+'+'-'*(WIDTH-2)+'+', 'dim')
 
 
@@ -219,11 +182,13 @@ def _mask(t):
     tick = int(t*16)
     _roof(c, t, flash=(shot == 0 and .3<f<.68) or (shot == 1 and .39<f<.62))
     if shot == 0:
-        c.put(4, 2, PORTRAITS['crow'], 'foe', opaque=True)
-        c.put(35, 2, PORTRAITS['joker'], 'face', opaque=True)
-        c.put(23, 5, ('  //  ', ' //   ', '//    '), 'red')
-        c.put(8, 10, ' [ CROW ] ', 'red', True)
-        c.put(38, 10, ' [ JOKER ] ', 'face', True)
+        cx, jx = 4+round(18*f), 2+round(7*f)
+        jy = 1+round(f*2)
+        _sprite(c, 'shadow', 48-round(6*f), 3, 'stand', -1)
+        _path(c, jx-5, jy+7, jx+1, jy+6, 'red', '.')
+        _sprite(c, 'joker', jx, jy, 'swing' if f<.68 else 'stand', 1)
+        c.put(cx-6, 10, '.-->', 'rail')
+        _sprite(c, 'crow', cx, 3+round(sin(pi*f)), 'rush', 1)
     elif shot == 1:
         _sprite(c, 'joker', 9, 3, 'stand', 1)
         _sprite(c, 'shadow', 42, 3, 'stand', -1)
@@ -232,7 +197,11 @@ def _mask(t):
             a = 2*pi*(i/6+f*.42)
             c.put(cx+4+round(cos(a)*(6+2*f)), 6+round(sin(a)*(3+f)), '+', 'red')
         _sprite(c, 'crow', cx, 3-(tick%2), 'rage', 1)
-        c.put(0, 13, '[ B E R S E R K ]'.center(WIDTH), 'flash', True)
+        for j in range(4):
+            dx = 3+j*2
+            y = 8+round(3*f)-j%2
+            c.put(cx-dx, y, '/\\'[j%2], 'rail')
+            c.put(cx+7+dx, y, '\\/'[j%2], 'rail')
     elif shot == 2:
         jx, jy = 9+round(18*f), 2-round(2*sin(pi*f))
         cx = 12+round(20*f)
@@ -271,13 +240,15 @@ def _mask(t):
             for i in range(9):
                 c.put(36+i*2, 8+(i%4), '*..'[i%3], 'rope')
     else:
-        _sprite(c, 'crow', 4+max(0, 5-round(f*6)), 3, 'exit', -1)
-        _sprite(c, 'joker', 43, 3, 'stand', -1)
-        _center(c, 3, '/=------------------------=\\', 'rail', True)
-        _center(c, 5, 'TWO SIDES', 'face', True)
-        _center(c, 6, 'OF THE MASK', 'gold', True)
-        _center(c, 8, '\\=------------------------=/', 'rail', True)
-        c.put(0, 13, '[ CROW x JOKER ]'.center(WIDTH), 'face', True)
+        # Crow is already walking out as the staggered Shadow dissolves.
+        # Joker lowers his arm and crosses the roof to follow.
+        if f<.40:
+            _sprite(c, 'shadow', 43+round(5*f), 4+round(6*f), 'reel', -1)
+        for j in range(12):
+            if f<(j+2)/14:
+                c.put(43+j%6-round(f*9), 7+j%5+round(f*4), '.,*'[j%3], 'dim')
+        _sprite(c, 'crow', 8-round(18*f), 4-(tick%2), 'exit', -1)
+        _sprite(c, 'joker', 16-round(5*f), 3, 'bow' if f<.22 else 'stand', -1)
     return MASK_BEATS[shot][1], c.finish()
 
 
@@ -324,16 +295,19 @@ def _waltz(t):
         for j in range(5):
             c.put(x+5+j*2, y+4-j%3, '.,*'[j%3], 'cyan')
     elif shot == 3:
-        c.put(6, 2, PORTRAITS['violet'], 'cyan', True)
-        c.put(13, 2, '<>', 'red')
-        c.put(35-round(3*f), 1, ('  .-~^~~.', ' /- ~  ~\\',
-                                 '(      < )', ' \\    o_o)',
-                                 '  \\___-_/ ', '   _/|\\__ ',
-                                 '  / /|\\ \\ '), 'face', True)
-        _path(c, 20, 9, 28, 8, 'cyan')
-        _path(c, 37, 8, 30, 8, 'face')
-        c.put(27, 8, '-*-' if f>.45 else ' . ', 'flash')
-        _center(c, 12, ' [ VIOLET  /  KASUMI ] ', 'face', True)
+        # Kasumi approaches across the aisle, catches Violet's hand, and
+        # pulls her up into their first turn; neither stops to face camera.
+        vx, vy = 23+round(4*f), 3-round(f*2)
+        kx, ky = 49-round(12*f), 1+round(f*2)
+        _sprite(c, 'shadow', 47, 4, 'reel', -1)
+        _sprite(c, 'violet', vx, vy, 'reach', 1)
+        _sprite(c, 'echo', kx, ky, 'reach', -1)
+        for j in range(6):
+            a = 2*pi*(f+j/6)
+            c.put(34+round(8*cos(a)), 7+round(3*sin(a)), '.', 'cyan' if j%2 else 'face')
+        if f>.48:
+            _path(c, vx+8, vy+5, kx, ky+5, 'face')
+            c.put(round((vx+8+kx)/2), round((vy+ky)/2)+5, '+', 'flash')
     elif shot == 4:
         # The two silhouettes orbit, swapping foreground and background.
         a = 2*pi*f
@@ -357,12 +331,24 @@ def _waltz(t):
             _path(c, 32, 1, 55, 10, 'cyan')
             _shards(c, 46, 6, tick, 'gold', 12)
     else:
-        _dip(c, 14, 3-round(1-f))
-        c.put(5, 3, '+', 'face')
-        c.put(48, 3, '+', 'face')
-        _center(c, 11, '.-=-----------------------=-.', 'cyan', True)
-        c.put(0, 12, 'T H E  L A S T  W A L T Z'.center(WIDTH), 'face', True)
-        c.put(0, 14, 'JOKER x VIOLET'.center(WIDTH), 'gold', True)
+        # Joker slides beneath Violet's landing. They dip and rise in one
+        # gesture while the last slash petals keep falling onto the aisle.
+        if f<.29:
+            g = f/.29
+            _sprite(c, 'joker', 6+round(9*g), 3, 'swing', 1)
+            _sprite(c, 'violet', 37-round(9*g), 1+round(3*g), 'reach', -1)
+        elif f<.83:
+            g = (f-.29)/.54
+            dt = sin(pi*g)
+            _dip(c, 14-round(2*g), 2+round(2*dt))
+        else:
+            g = (f-.83)/.17
+            _sprite(c, 'joker', 13+round(g*3), 3, 'bow', 1)
+            _sprite(c, 'violet', 29-round(g*3), 3, 'spin', -1)
+        for j in range(12):
+            drift = (f*.71+j*.11)%1
+            c.put(8+(j*14+round(7*drift))%49, 4+round(10*drift),
+                  ('.', '*', ',')[j%3], 'red' if j%3==1 else 'face')
     return WALTZ_BEATS[shot][1], c.finish()
 
 

@@ -1,5 +1,6 @@
 import curses as C
 from pathlib import Path
+import re
 import tempfile
 import unittest
 
@@ -36,7 +37,8 @@ class GalleryTests(unittest.TestCase):
         self.assertEqual((self.app.page,self.app.i), ('gallery',3))
         self.app.gallery.key(self.app, '\n', now=0)
         self.app.gallery.draw(self.app, now=0.2)
-        self.assertIn('ROSE & REVOLVER', ' '.join(self.app.out))
+        self.assertTrue(self.app.out)
+        self.assertNotIn('ROSE & REVOLVER', ' '.join(self.app.out))
         self.assertTrue(self.app.key(ESC))  # Leave the preview first.
         self.assertEqual(self.app.page, 'gallery')
         self.assertTrue(self.app.key(ESC))
@@ -56,7 +58,8 @@ class GalleryTests(unittest.TestCase):
             titles.append(c.title)
             self.app.out.clear()
             g.draw(self.app, now=now+0.6)
-            self.assertIn(c.title,' '.join(self.app.out))
+            self.assertTrue(self.app.out)
+            self.assertFalse(re.search(r'[A-Z]{3,}', ' '.join(self.app.out)))
             if c.hp:self.assertTrue(any('▓' in s for s in self.app.out))
             now += 2.1 if c.hp else duration(c.title)+0.03
             g.draw(self.app, now=now)
@@ -72,8 +75,10 @@ class GalleryTests(unittest.TestCase):
         g.key(self.app,'\n',now=1)
         g.key(self.app,'r',now=1.6)
         self.assertEqual(g.started,1.6)
-        g.draw(self.app,now=2.8)
-        self.assertIn('WAVE CLEARED', ' '.join(self.app.out))
-        self.assertTrue(g.key(self.app, ESC, now=3))
+        self.app.out.clear()
+        g.draw(self.app,now=3.28)
+        self.assertEqual(sum(' ( * * ) ' == row for row in self.app.out),3)
+        self.assertNotIn('WAVE CLEARED', ' '.join(self.app.out))
+        self.assertTrue(g.key(self.app, ESC, now=3.3))
         self.assertIsNone(g.started)
-        self.assertFalse(g.key(self.app, ESC, now=3))
+        self.assertFalse(g.key(self.app, ESC, now=3.3))

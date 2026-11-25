@@ -2,7 +2,7 @@
 import curses as C
 import textwrap
 import time
-from cutins import CUTIN_SECONDS, duration as cutin_duration, look as cutin_look
+from cutins import duration as cutin_duration
 import cinema
 from wrestling_scene import HEIGHT as SCENE_ROWS, WIDTH as SCENE_COLUMNS
 
@@ -539,51 +539,27 @@ class BattleUI:
                  'Your current fight stays paused. Open Velvet Room again to pick up where you left off.',
                  self.w-6,3,WHITE)
 
-    def draw_cutin(self,title,subtitle,elapsed=0.0,footer='ENTER / ESC SKIP'):
-        """Draw one timing-independent frame, for combat or a gallery preview."""
-        kind,cast,motif,tokens,palette=cutin_look(title)
+    def draw_cutin(self,title,elapsed=0.0):
+        """Only paint the animation. Names and controls belong to the menu."""
         scene=cinema.get(title)
-        if scene:
-            if kind=='SHOWTIME':
-                heading='SHOWTIME // RINGSIDE' if title=='PALACE BODY SLAM' else 'PHANTOM LINK // SHOWTIME'
-            else:
-                heading='PHANTOM LINK // ALL-OUT ATTACK'
-            self.frame(heading,footer)
-            beat,rows=scene[1](elapsed)
-            inks={'queen':CYAN,'noir':GOLD,'foe':RED,'rope':DIM,
-                  'rail':RED,'face':WHITE,'dim':DIM,'flash':GOLD,
-                  'red':RED,'gold':GOLD,'cyan':CYAN,'green':GREEN,'white':WHITE}
-            left=(self.w-SCENE_COLUMNS)//2
-            top=(self.h-SCENE_ROWS-4)//2+1
-            caption=title+'  /  '+cast.replace('×','x') if kind=='SHOWTIME' else title
-            self.mid(top-2,caption,WHITE,True)
-            for y,row in enumerate(rows,top):
-                x=left
-                for run,ink in row:
-                    if run.strip():self._b_put(y,x,run,inks[ink],ink not in ('dim','rope'))
-                    x+=len(run)
-            self.mid(top+len(rows),beat,GOLD,True)
+        if not scene:
+            # Defensive fallback for unknown future events, with no captions.
+            size=max(1,min(18,int(elapsed*18)+1))
+            for dy in (-2,-1,0,1,2):
+                self._b_put(self.h//2+dy,self.w//2-size-1,'*',GOLD)
+                self._b_put(self.h//2+dy,self.w//2+size+1,'*',GOLD)
             return
-        accent={'red':RED,'gold':GOLD,'cyan':CYAN,'green':GREEN}[palette]
-        step=min(4,int(max(0.0,elapsed)*5/CUTIN_SECONDS))
-        center=self.h//2
-        # The changing borders and traveling marks keep the important text
-        # fixed in place, including in the first frame and at 65 x 25.
-        span=max(12,min(self.w-8,76))
-        indent=max(3,(self.w-span)//2)
-        left,right=tokens[step%3],tokens[(step+2)%3]
-        self.frame('PHANTOM LINK // CUT-IN',footer)
-        self.mid(center-8,kind,WHITE,True)
-        self._b_put(center-6,indent,('╱' if step%2 else '┄')*span,accent)
-        spread=len(cast)//2+5+2*step
-        self.mid(center-4,cast,accent,True)
-        self._b_put(center-4,max(3,self.w//2-spread),left,WHITE,True)
-        self._b_put(center-4,min(self.w-5,self.w//2+spread),right,WHITE,True)
-        self.mid(center-1,title,accent,True)
-        self.mid(center+2,subtitle,WHITE)
-        self.mid(center+4,f'{left}  {motif}  {right}',accent,True)
-        progress=step*span//4
-        self._b_put(center+6,indent,'━'*progress+'─'*(span-progress),accent)
+        _,rows=scene[1](elapsed)
+        inks={'queen':CYAN,'noir':GOLD,'foe':RED,'rope':DIM,
+              'rail':RED,'face':WHITE,'dim':DIM,'flash':GOLD,
+              'red':RED,'gold':GOLD,'cyan':CYAN,'green':GREEN,'white':WHITE}
+        left=(self.w-SCENE_COLUMNS)//2
+        top=(self.h-SCENE_ROWS)//2
+        for y,row in enumerate(rows,top):
+            x=left
+            for run,ink in row:
+                if run.strip():self._b_put(y,x,run,inks[ink],ink not in ('dim','rope'))
+                x+=len(run)
 
     def battle_page(self):
         self._b_ensure()
@@ -593,8 +569,8 @@ class BattleUI:
         if self._b_overlay:
             self._b_over()
         elif self._b_cut_in:
-            title,subtitle,started,_=self._b_cut_in
-            self.draw_cutin(title,subtitle,now-started)
+            title,_,started,_=self._b_cut_in
+            self.draw_cutin(title,now-started)
         elif self._b_screen=='setup':
             self._b_setup_draw()
         else:

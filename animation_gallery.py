@@ -111,29 +111,37 @@ class AnimationGallery:
             app.frame('METAVERSE / ANIMATION GALLERY', '←→ CATEGORY  ↑↓ SELECT  ENTER PLAY  P PLAY ALL  ESC BACK')
             app.put(4, 3, '◆  ANIMATION GALLERY', GOLD, True)
             app.put(6, 3, f'‹  {self.groups[self.group][0]}  ›   {self.group+1}/{len(self.groups)}', CYAN, True)
-            app.put(7, 3, 'Preview only. Story progress is not used.', DIM)
+            app.put(7, 3, 'During playback: Enter skips, R replays, Esc stops.', DIM)
             rows = [(c.title, c.detail, True) for c in self.clips]
             app._b_list(rows, 9, 4, app.w-8, app.h-15, self.index)
             app.put(app.h-5, 4, clip.detail, GOLD)
             return
         elapsed = now - self.started
-        footer = 'ENTER NEXT  R REPLAY  ESC STOP' if self.reel else 'ENTER / ESC BACK  R REPLAY'
         if clip.hp is None:
-            app.draw_cutin(clip.title, clip.subtitle, elapsed, footer=footer)
+            app.draw_cutin(clip.title, elapsed)
             return
-        app.frame('METAVERSE / BATTLE EFFECT', footer)
-        app.mid(6, clip.title, GOLD, True)
-        app.mid(9, clip.subtitle, WHITE)
         before, after = clip.hp
         impact = self.started + 0.35
         unit = PreviewHP(before if now < impact else after)
-        app.mid(12, f'SHADOW HP   {unit.hp}/{unit.max_hp}', CYAN, True)
         width = min(36, app.w-12)
-        # Use the real battle renderer but give it an isolated simulator state.
         renderer = HPPreview(app, {unit: (before, impact)} if now >= impact else {})
-        renderer.draw(14, (app.w-width)//2, unit, width, now)
+        center = app.h//2
+        if after > 0 or elapsed < 1.08:
+            app.mid(center-4, r' /\\_/\\ ', DIM if after == 0 and elapsed>.76 else WHITE, True)
+            app.mid(center-3, ' ( * * ) ', GOLD if .35<elapsed<.53 else WHITE, True)
+            renderer.draw(center,(app.w-width)//2,unit,width,now)
         if after == 0 and elapsed > 1.07:
-            app.mid(17, 'WAVE CLEARED  /  NEXT FORMATION INCOMING', GOLD, True)
+            # Show the defeated silhouette breaking up, then the new wave
+            # entering in formation. No announcer text in the effects reel.
+            tick=int((elapsed-1.07)*14)
+            if elapsed < 1.48:
+                app.mid(center-3,' .  *    .  ' if tick%2 else '   .   .  ',DIM)
+            else:
+                shift=max(0,round((1.86-elapsed)*24))
+                for i,x in enumerate((-12,0,12)):
+                    app.put(center-4,app.w//2-3+x+shift,r' /\\_/\\ ', DIM if tick%2 else CYAN, True)
+                    app.put(center-3,app.w//2-3+x+shift,' ( * * ) ', GOLD if i==1 else CYAN, True)
+
 
 
 class HPPreview:

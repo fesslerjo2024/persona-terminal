@@ -8,7 +8,7 @@ from itertools import groupby
 
 TITLE = 'PALACE BODY SLAM'
 WIDTH, HEIGHT = 57, 15
-# (end time, on-screen beat). The last second belongs to the held victory pose.
+# Editorial timecodes, never displayed during playback.
 BEATS = (
     (1.24, '01 / ENTER THE RING'),
     (1.88, '02 / RING THE BELL'),
@@ -51,29 +51,6 @@ ACTION = {
 }
 
 
-# Splash close-ups use larger original sprites than the in-ring action.
-PORTRAITS = {
-    'queen': (
-        r'    .------.',
-        r'   / ////// \ ',
-        r'  |========//|',
-        r'  | \==[]==/ |',
-        r'   \___v_v__/',
-        r'  / ^[###]^ \ ',
-        r' /_/|#####|\_\ ',
-    ),
-    'noir': (
-        r'      _/\ ',
-        r'    _/__ )_',
-        r' ===\_____)===',
-        r'   { (. .) }',
-        r'  {~\  v /~~}',
-        r'     >}< {',
-        r'   _/  o  \_',
-    ),
-}
-
-
 class Canvas:
     def __init__(self):
         self.cells = [[(' ', 'dim')] * WIDTH for _ in range(HEIGHT)]
@@ -108,7 +85,7 @@ def _ring(c, t, impact=False):
         audience = ''.join('o' if (x*11 + i*7) % 17 in (0, 4)
                            else '.' if (x*5+i) % 13 < 3 else ' ' for x in range(WIDTH))
         c.put(0, 2+i, audience, 'dim')
-    c.put(17, 0, ' +--- IRWF ARENA ---+ ', 'rail', opaque=True)
+    
     for y in (5, 7, 9):
         c.put(4, y, 'O' + '='*47 + 'O', 'rope')
     for x in (4, 52):
@@ -117,7 +94,7 @@ def _ring(c, t, impact=False):
     c.put(3, 10, '/' + '.'*49 + '\\', 'dim')
     c.put(2, 11, '/' + '.'*51 + '\\', 'dim')
     c.put(1, 12, 'O' + '='*53 + 'O', 'rail')
-    c.put(1, 13, '|         [ PHANTOM WRESTLING FEDERATION ]           |', 'rail')
+    c.put(1, 13, '|'+' /'*26+' |', 'rail')
     c.put(1, 14, '+' + '-'*53 + '+', 'rail')
     for x, y in ((8, 3), (49, 3), (54, 6), (2, 8)):
         if (int(t*10)+x) % 8 < (5 if impact else 2):
@@ -129,20 +106,12 @@ def _impact(c, x, y, big=False):
         r'      \    |    /',
         r'  --   \   |   /   --',
         r'     .-*=======*-.',
-        r'>>>  <  K R A K  >  <<<',
+        r'>>>  <    #!#    >  <<<',
         r'     `-*=======*-`',
         r'  --   /   |   \   --',
         '      /    |    \\',
     ) if big else (r'   \ | /', '--< * >--', '   / | \\')
     c.put(x, y, burst, 'flash', opaque=True)
-
-
-def _titles(c, first, second):
-    for y in (1, 13):
-        c.put(9, y, '/' * 39, 'rope')
-    c.put(16, 2, ' [ SHOWTIME / TAG TEAM ] ', 'rail', opaque=True)
-    c.put(10, 11, '  '+first+'  ', 'queen', opaque=True)
-    c.put(35, 11, '  '+second+'  ', 'noir', opaque=True)
 
 
 def render(elapsed):
@@ -153,18 +122,17 @@ def render(elapsed):
     f = dt / (ENDS[shot] - (ENDS[shot-1] if shot else 0))
     c = Canvas()
     _ring(c, t, shot in (6, 8))
-    if shot == 0 and f < .52:
-        _titles(c, 'Q U E E N', 'N O I R')
-        c.put(9, 3, PORTRAITS['queen'], 'queen', opaque=True)
-        c.put(34, 3, PORTRAITS['noir'], 'noir', opaque=True)
-        c.put(26, 6, '  &  ', 'rail', opaque=True)
-    elif shot <= 1:
+    if shot <= 1:
         c.sprite('foe', 25, 4)
-        c.sprite('queen', 8 + int(f*4), 4)
-        c.sprite('noir', 41 - int(f*3), 3)
+        step = f * .65 if shot == 0 else .65 + f * .35
+        c.sprite('queen', 6 + int(step*6), 4, 'run' if int(t*10)%2 else 'ready')
+        c.sprite('noir', 46 - int(step*8), 3, 'run' if int(t*10)%2 else 'ready')
+        c.put(25, 0, ('  _o_  ', ' /___\\ ', '   *   '), 'gold', opaque=True)
         if shot == 1:
-            c.put(18, 1, ('  (( DING! DING! ))  ' if int(dt*11)%2
-                         else '     DING! DING!     '), 'flash', opaque=True)
+            for j in range(1,4):
+                radius = j*4+int(f*4)
+                c.put(28-radius,1,'((', 'face')
+                c.put(27+radius,1,'))', 'face')
     elif shot == 2:
         c.sprite('foe', 26 + (2 if f>.64 else 0), 4)
         c.sprite('noir', 42, 3)
@@ -194,28 +162,29 @@ def render(elapsed):
         c.put(46-x, max(0,y-1), '/ /', 'noir')
         c.sprite('queen', 7+x, y, 'dive')
         c.sprite('noir', 43-x, y, 'dive')
-        c.put(2, 13, '[ DOUBLE DEATH BLOW ]'.center(53), 'flash', opaque=True)
     elif shot == 6:
         # Brief impact panel, not a rapidly alternating full-screen flash.
         c.sprite('queen', 12, 5, 'strike')
         c.sprite('noir', 37, 4, 'kick')
         _impact(c, 17, 2, big=True)
-        c.put(16, 12, '[ D O U B L E   D I V E ]', 'flash', opaque=True)
     elif shot == 7:
         c.sprite('queen', 10, 4)
         c.put(22, 10, r'--<*_[(@)]_*>--', 'foe', opaque=True)
         c.put(23, 8, (' __/}>{\\', '/_==/o\\_>'), 'noir', opaque=True)
-        count = min(3, 1+int(dt/.60))
+        count = min(3, int(dt/.60)+1)
         for i in range(count):
-            c.put(18+i*8, 2, f'[ {i+1} ]', 'flash' if i==count-1 else 'rail', opaque=True)
-        c.put(2, 13, '[ PINFALL ]'.center(53), 'rail', opaque=True)
-        c.put(37, 8, ('  (o)', ' __|__', '/_/ \\_'), 'face', opaque=True)
-        if int(dt*10)%6<3:
-            c.put(37, 11, '* SLAP *', 'flash', opaque=True)
+            c.put(20+i*7, 2, '*', 'flash' if i==count-1 else 'rail')
+        if dt%.60 < .22:
+            c.put(37, 8, ('  (o)', ' __/___', '/_/ \\_'), 'face', opaque=True)
+            c.put(43, 11, '*', 'flash')
+        else:
+            c.put(37, 8, ('  (o)', ' __|_/', '/_/ \\_'), 'face', opaque=True)
     else:
-        _titles(c, 'Q U E E N', 'N O I R')
-        c.sprite('queen', 13, 3, 'victory')
-        c.sprite('noir', 36, 3, 'victory')
-        c.put(24, 6, '  WIN!  ', 'flash', opaque=True)
-        c.put(2, 13, '[ P I N F A L L ]'.center(53), 'flash', opaque=True)
+        # Let the referee rise and raise a hand. The camera stays ringside.
+        c.put(22, 10, r'--<*_[(@)]_*>--', 'foe', opaque=True)
+        c.sprite('queen', 10+int(f*6), 4, 'victory' if f>.38 else 'ready')
+        c.sprite('noir', 29+int(f*4), 4-int(f*2), 'victory' if f>.50 else 'ready')
+        c.put(43, 8-int(f*4), ('  (o)/', ' __|/', '  / \\ '), 'face', opaque=True)
+        for j in range(3):
+            c.put(23+j*6, 2, '+' if int(t*8)%3==j else '*', 'flash')
     return BEATS[shot][1], c.finish()

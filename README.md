@@ -46,9 +46,10 @@ Press **P** to play all clips in order, **R** to replay, or **Esc** to back out.
 Gallery previews do not read or alter battle progress.
 
 The eight Showtimes are full original ASCII scenes. **All-Out Attacks** has
-nine animated character finishers; Futaba's UFO finisher is under
-**Oracle Support → 3**. Moral Support, Final Guard and both HP effects remain
-separate clips. Final Guard is a preview only in this build.
+nine animated character finishers. **Oracle Support** has three action-only
+scenes: the squad recovery relay, Final Guard's shield, and the UFO flyover.
+Final Guard is a preview only in this build. Playback is artwork only:
+no portrait cards, scene captions, or control overlays.
 
 The game uses the same scenes in eligible fights. Enter, Space or Esc skips
 the cut-in without replaying or cancelling damage. The animation pack does

@@ -30,9 +30,8 @@ class WrestlingSceneTests(unittest.TestCase):
         self.assertNotEqual(render(1.9)[1], render(2.47)[1])
         self.assertNotEqual(render(4.57)[1], render(5.42)[1])
         for when, number in ((5.95,1), (6.62,2), (7.22,3)):
-            s = flatten(render(when)[1])
-            for n in range(1,4):
-                self.assertEqual(f'[ {n} ]' in s,n <= number)
+            row = flatten(render(when)[1]).splitlines()[2]
+            self.assertEqual(sum(row[x]=='*' for x in (20,27,34)), number)
 
     def test_gallery_uses_scene_duration_without_touching_save(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -44,9 +43,13 @@ class WrestlingSceneTests(unittest.TestCase):
             g.key(app,'6',now=0)
             self.assertEqual(g.clip.title,TITLE)
             g.draw(app,now=2.2)
-            self.assertIn('03 / QUEEN: LARIAT',app.out)
+            self.assertTrue(app.out)
+            self.assertNotIn('03 / QUEEN: LARIAT', app.out)
+            opening = app.out[:]
+            app.out.clear()
             g.draw(app,now=SECONDS-.01)
-            self.assertIn('09 / MATCH OVER',app.out)
+            self.assertNotEqual(app.out,opening)
+            self.assertNotIn('09 / MATCH OVER',app.out)
             g.draw(app,now=SECONDS+.01)
             self.assertIsNone(g.started)
             self.assertEqual(save.read_bytes(),before)
