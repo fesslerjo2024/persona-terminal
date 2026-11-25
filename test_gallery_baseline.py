@@ -36,7 +36,8 @@ class GalleryBaselineTests(unittest.TestCase):
                 strings = [line for _,_,line in app.calls]
                 self.assertEqual(sum('ANIMATION GALLERY' in line for line in strings), 1)
                 self.assertEqual(sum('ESC BACK' in line for line in strings), 1)
-                self.assertNotIn('R REPLAY', ' '.join(strings))
+                footer = [line for y,_,line in app.calls if y == h-2]
+                self.assertEqual(sum('R REPLAY' in line and 'L LOOP' in line for line in footer), 1)
                 for y,x,line in app.calls:
                     self.assertLessEqual(x+len(line), w-1)
                     self.assertLess(y,h)

@@ -52,6 +52,7 @@ class AnimationGallery:
         self.group = self.index = 0
         self.started = None
         self.reel = False
+        self.loop = False
 
     @property
     def clips(self):
@@ -61,8 +62,14 @@ class AnimationGallery:
     def clip(self):
         return self.clips[self.index]
 
-    def _advance(self, now):
-        if not self.reel:
+    def _advance(self, now, *, manual=False):
+        if self.loop:
+            if manual:
+                self.loop=False
+                self.started=None
+            else:
+                self.started=now
+        elif not self.reel:
             self.started = None
         elif self.index + 1 < len(self.clips):
             self.index += 1
@@ -81,16 +88,21 @@ class AnimationGallery:
             if key == ESC:
                 self.started = None
                 self.reel = False
+                self.loop = False
             elif key in ('r', 'R'):
                 self.started = now
             elif key in ENTER or key == ' ':
-                self._advance(now)
+                self._advance(now,manual=True)
             return True
         if key == ESC:
             return False
         if key in (C.KEY_LEFT, C.KEY_RIGHT):
             self.group = (self.group + (1 if key == C.KEY_RIGHT else -1)) % len(self.groups)
             self.index = 0
+            return True
+        if key in ('l', 'L'):
+            self.loop = True
+            self.started = now
             return True
         if key in ('p', 'P'):
             self.group = self.index = 0
@@ -113,7 +125,7 @@ class AnimationGallery:
                 self._advance(now)
                 clip = self.clip
         if self.started is None:
-            app.frame('ANIMATION GALLERY', '←→ CATEGORY  ↑↓ SELECT  ↵ PLAY  P PLAY ALL  ESC BACK')
+            app.frame('ANIMATION GALLERY', '←→ GROUP  ↑↓ SELECT  ↵ PLAY  R REPLAY  L LOOP  P ALL  ESC BACK')
             app.put(5, 3, f'‹ {self.groups[self.group][0]} ›  {self.group+1}/{len(self.groups)}', CYAN, True)
             rows = []
             for entry in self.clips:

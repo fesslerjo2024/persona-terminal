@@ -82,6 +82,29 @@ class GalleryTests(unittest.TestCase):
         self.assertIsNone(g.started)
         self.assertFalse(g.key(self.app, ESC, now=3.3))
 
+    def test_loop_replays_only_selected_clip_and_clears_on_leave(self):
+        g = AnimationGallery()
+        g.key(self.app,C.KEY_RIGHT,now=0)
+        g.key(self.app,C.KEY_DOWN,now=0)
+        chosen=g.clip
+        g.key(self.app,'l',now=1)
+        self.assertTrue(g.loop)
+        self.assertFalse(g.reel)
+        g.draw(self.app,now=chosen.duration+1.01)
+        self.assertIs(g.clip,chosen)
+        self.assertAlmostEqual(g.started,chosen.duration+1.01)
+        g.key(self.app,'r',now=chosen.duration+1.11)
+        self.assertAlmostEqual(g.started,chosen.duration+1.11)
+        g.key(self.app,' ',now=chosen.duration+1.21)
+        self.assertIsNone(g.started)
+        self.assertFalse(g.loop)
+        self.assertIs(g.clip,chosen)
+        g.key(self.app,'L',now=20)
+        self.assertTrue(g.key(self.app,ESC,now=20.1))
+        self.assertFalse(g.loop)
+        self.assertFalse(g.key(self.app,ESC,now=20.2))
+        self.assertFalse(self.save.exists())
+
     def test_testing_gallery_shortcut_round_trips_map_and_keeps_sandbox(self):
         from copy import deepcopy
         self.app.story.new_game()

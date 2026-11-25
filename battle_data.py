@@ -169,7 +169,7 @@ ENEMIES = {
     'Cerberus':shadow(188,44,['Maragion','Agilao','Tempest Slash'],{'Fire':'drain','Ice':'weak','Nuclear':'resist'},'aggressive'),
     'Thor':shadow(215,47,['Mazionga','Zionga','Tempest Slash','Tarukaja'],{'Electric':'null','Psy':'weak','Bless':'resist','Curse':'resist'},'aggressive'),
     'Rangda':shadow(168,55,['Maragion','Eiga','Evil Smile'],{'Physical':'repel','Gun':'repel','Fire':'null','Electric':'weak','Bless':'weak','Curse':'null'},'ailment'),
-    'Twin Wardens':shadow(299,89,['Agilao','Bufula','Zionga','Garula','Psio','Freila','Kouga','Eiga','Megidola','Diarama','Marakukaja','Dekunda'],{},'boss'),
+    'Twin Wardens':shadow(299,89,['Agilao','Bufula','Zionga','Garula','Psio','Freila','Kouga','Eiga','Megidola','Tarunda','Marakukaja','Dekunda'],{},'boss'),
     'The Reaper':shadow(1120,102,[],{},'reaper',no_knockdown=True),
 }
 
@@ -185,20 +185,21 @@ ENCOUNTERS = {
     'Sheriruth Gauntlet':dict(
         description='A deep-Mementos sweep with mixed affinities and aggressive spellcasters.',
         hint='Electric, Ice, Psy and Bless can start chains; rotate Joker’s mask to guard his weak point.',
-        waves=[['Rangda','Cerberus','Queen Mab'],['Thor','Arahabaki','Nue'],['Cerberus','Thor']]),
+        waves=[['Rangda','Cerberus','Silky'],['Thor','Arahabaki'],['Cerberus','Thor']],
+        between_wave_recovery=(.20,7)),
     'Wardens’ Examination':dict(
         description='A sparring simulation against the Twin Wardens. They deny easy knockdowns.',
-        hint='No innate weakness on the Wardens. Use defense, recovery, attack debuffs and Technicals.',
-        waves=[['Shiki-Ouji','Queen Mab'],['Twin Wardens','Rangda']]),
+        hint='Use Nuclear on the opening defender. The Wardens have no weakness; counter their stat pressure.',
+        waves=[['Shiki-Ouji','Silky'],['Twin Wardens','Rangda']],between_wave_recovery=(.25,8)),
     'Reaper Alert':dict(
         description='A single sustained battle. The Reaper changes tactics as its health falls. No reinforcements.',
-        hint='Guard when it Concentrates. Keep Joker healthy, time your buffs, and save SP for the end.',
+        hint='Guard when it Concentrates. In later phases favor attack debuffs and recovery before the next blast.',
         waves=[['The Reaper']]),
     'Wild Card: Joker Solo':dict(
-        description='A solo certification: no teammates and no Baton Pass. Make each Persona switch count.',
-        hint='Use Analyze and recover early. Enemy weaknesses matter, but your current Persona’s do too.',
-        waves=[['Bicorn','Silky'],['Shiki-Ouji','Jack-o\'-Lantern'],['Nue','Arahabaki']],
-        party_size=1),
+        description='Three solo rounds with a recovery break between each. There are no allies or Baton Pass.',
+        hint='Guard prevents a weakness knockdown. Switch to a safer mask, and avoid the final Shadow’s reflected shots.',
+        waves=[['Silky'],['Shiki-Ouji'],['Arahabaki']],
+        between_wave_recovery=(.32,10),party_size=1),
     'Mementos Shuffle':dict(
         description='Three different Shadows are drawn from across Mementos on every deployment.',
         hint='No preview. Bring flexible elements, healing and an answer to repels.',

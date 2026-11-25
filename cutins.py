@@ -1,6 +1,20 @@
 """Original terminal cut-ins; no game artwork or dialogue is bundled."""
 
+from dataclasses import dataclass
+
 import cinema
+
+
+ACTIVE_ORACLE_FEATURES = frozenset(("support", "ufo"))
+
+
+@dataclass(frozen=True)
+class CutCue:
+    title: str
+    description: str
+    finishing: bool = False
+    cast: tuple[str, ...] = ()
+    targets: int = 0
 
 ALL_OUT = {
     'Joker':   ('JOKER // CURTAIN CALL', 'The wildcard closes the case.'),

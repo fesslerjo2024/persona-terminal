@@ -1,5 +1,46 @@
 """Story-only adaptations of signature mechanics from Persona 5 Royal."""
+from functools import lru_cache
+from importlib import import_module
+from importlib.util import find_spec
+
 from battle_data import SKILLS
+
+_EXTENSIONS = ('sae_boss', 'depths_boss', 'lab_boss', 'solo_duel')
+
+
+@lru_cache(maxsize=None)
+def _extension(name):
+    return import_module(name) if find_spec(name) is not None else None
+
+
+def _hooks(name):
+    for extension in _EXTENSIONS:
+        module = _extension(extension)
+        hook = getattr(module, name, None)
+        if hook is not None:
+            yield hook
+
+
+def on_spawn(b):
+    for hook in _hooks('on_spawn'):
+        hook(b)
+
+
+def hidden_enemies(b):
+    return {u for hook in _hooks('hidden_enemies') for u in hook(b)}
+
+
+def before_state(b):
+    for hook in _hooks('before_state'):
+        hook(b)
+
+
+def action_block(b, action, skill=None):
+    for hook in _hooks('action_block'):
+        reason = hook(b, action, skill)
+        if reason:
+            return reason
+    return None
 
 def _living(units):
     return [u for u in units if u.alive]
@@ -38,6 +79,7 @@ def intercept(b,target,skill):
     return target
 
 def block_hit(b,target,skill):
+    if any(hook(b,target,skill) for hook in _hooks('block_hit')):return True
     if target.behavior=='pyramid-wakaba' and not b._boss_state.get('grounded') and skill.get('element')=='Physical':
         b._say('Wakaba is airborne. Use abilities or Gun instead of melee.')
         return True
@@ -47,6 +89,9 @@ def block_hit(b,target,skill):
     return False
 
 def intent(b):
+    for hook in _hooks('intent'):
+        result=hook(b)
+        if result:return result
     st=b._boss_state
     if _active(b,'castle-king') and 'pending' in st:return 'ROYAL SMASH incoming. Guard before the swing.'
     if _active(b,'bank-piggytron'):
@@ -59,7 +104,7 @@ def intent(b):
         if special(b):return 'BALLISTA READY  /  Press 9 to ground Wakaba.'
         return 'WAKABA GROUNDED  /  Take the opening.' if st.get('grounded') else 'WAKABA AIRBORNE  /  Use skills or Gun.'
     if _active(b,'space-worker'):
-        return 'SHIFT CLOCK  /  '+('Reissue spent. Finish this squad.' if st.get('reissued') else f"Reinforcements after round {st.get('due',_shift_deadline(b))-1}.")
+        return 'SHIFT CLOCK  /  '+('Reissue spent. Finish this squad.' if st.get('reissued') else f"Clear by end of round {st.get('due',_shift_deadline(b))-1}.")
     if _active(b,'space-exec'):
         return 'BIG BANG CHALLENGE incoming. Guard.' if 'pending' in st else 'EXECUTIVE DIRECTOR  /  Watch the charge.'
     if _active(b,'space-cognitive'):
@@ -70,6 +115,9 @@ def intent(b):
 def special(b):
     st=b._boss_state
     if b.phase!='turn':return None
+    for hook in _hooks('special'):
+        result=hook(b)
+        if result:return result
     if _active(b,'bank-piggytron') and 'pending' in st and not st.get('bait') and b.items.get('Medicine',0):
         return ('story-special','Bait Piggytron','Sacrifice one Medicine and cancel the charge (once).')
     if _active(b,'pyramid-wakaba') and st.get('ready'):
@@ -77,6 +125,10 @@ def special(b):
     return None
 
 def use_special(b):
+    for extension in _EXTENSIONS:
+        module=_extension(extension)
+        hook=getattr(module,'special',None)
+        if hook is not None and hook(b):return module.use_special(b)
     row=special(b)
     if row is None:return 'This special action is not available.'
     st=b._boss_state
@@ -98,6 +150,8 @@ def _shift_deadline(b):
     return 1+durations[b.wave-1] if b.wave<=len(durations) else 4
 
 def on_round(b):
+    for hook in _hooks('on_round'):
+        hook(b)
     st=b._boss_state
     if _active(b,'space-worker') and not st.get('reissued') and b.round>=st.get('due',_shift_deadline(b)):
         for u in b.enemies:
@@ -116,6 +170,9 @@ def on_round(b):
             b._say('ORACLE / MORAL SUPPORT: the squad recovers HP and SP.')
 
 def enemy_step(b,a):
+    for hook in _hooks('enemy_step'):
+        result=hook(b,a)
+        if result is not None:return result
     behavior=a.behavior;st=b._boss_state
     if behavior=='castle-trophy':
         king=_active(b,'castle-king')

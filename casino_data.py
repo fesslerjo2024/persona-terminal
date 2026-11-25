@@ -3,8 +3,9 @@
 Terminal-sized formations and stats are adaptations. Royal footage chapters:
 https://www.youtube.com/watch?v=x5LDcdELNwo (Staff-Only, Dice, Slot, Darkness).
 Recorded entry preview: https://www.bilibili.com/video/BV1214y1J7HP/
-The Royal field scripts (0157_006_120, 0157_007_110 and _130, 0157_009_021,
-0157_010_020 and _130, 0157_012_120, 0157_013_100) document the events.
+Arena footage starts at 1:42:25 in the walkthrough above. Royal field scripts
+0157_015_110–140 establish the solo rounds and prize; 0157_011_100 records
+the raised toll and two-card loophole used at the Bridge of Judgment.
 """
 from copy import deepcopy
 
@@ -17,9 +18,14 @@ ENEMY_ADDITIONS = {
         {'Physical':'resist','Gun':'resist','Wind':'drain','Psy':'weak'},'aggressive'),
     'Wandering Reviver': shadow(238,55,('Mapsio','Maragion'),
         {'Physical':'resist','Wind':'weak','Bless':'weak','Curse':'resist'},'ailment'),
-    'Casino Arena Guardian': shadow(460,100,['Rising Slash','Rakukaja','Zionga'],{},'boss',
-                                    no_knockdown=True,adaptation='Terminal-balanced phase; not original boss statistics.'),
-    'Sae Leviathan': shadow(860,100,['Tempest Slash','Megido','Dekaja','Matarunda'],{},'boss',
+    # Arena-only versions, so regular Shadows elsewhere retain their stats.
+    'Arena Ganesha': shadow(110,0,(),
+        {'Wind':'drain','Psy':'weak'},'aggressive'),
+    'Arena Rangda': shadow(72,12,('Eiha',),
+        {'Physical':'repel','Gun':'repel','Fire':'null','Electric':'weak','Bless':'weak','Curse':'null'},'aggressive'),
+    'Arena Thor': shadow(345,56,('Zionga','Rakukaja'),
+        {'Electric':'null','Bless':'resist','Curse':'resist'},'boss',no_knockdown=True),
+    'Sae Leviathan': shadow(860,100,[],{},'casino-sae',
                             no_knockdown=True,adaptation='Terminal-balanced phase; not original boss statistics.'),
     'Snake King': shadow(375,55,('Mazionga',), {'Gun':'resist'},'casino-snake',no_knockdown=True),
 }
@@ -65,21 +71,21 @@ NODES = (
        story_gate=dict(requires='real_world_courthouse_visit')),
     _n('casino-arena','The Unfair Arena','SOLO',
        'Joker enters the Battle Arena alone. The casino changes the terms and sends successive opponents rather than honoring a fair contest.',
-       'Joker wins the arena prize. The team reunites at the bridge to the manager\'s floor.',
-       [['Ose'],['Power'],['Casino Arena Guardian']],party_size=1,
-       hint='Solo operation: bring healing and support on Joker; do not depend on a Baton Pass.'),
+       'The arena pays 100,000 coins. Joker rejoins the team at the Bridge of Judgment.',
+       [['Arena Ganesha']*2,['Arena Rangda']*3,['Arena Thor']],party_size=1,
+       solo_threats=('Electric','Curse'),between_wave_recovery=(.26,8),items={'Stun Gun':2},
+       hint='Bring varied magic, healing and an Electric-safe mask. Two Stun Guns are supplied; recover some HP and SP between rounds.'),
     _n('casino-bridge','A Million-Coin Toll','BRIDGE',
-       'Sae raises the bridge fee from one hundred thousand to one million coins. Akechi uses the casino\'s own card and coin rules to meet the demand.',
-       'The route to the treasure is secured. The calling card and heist follow the team\'s fixed plan, rather than an immediate attack.',
-       [['Skadi','Rangda']],story_gate=dict(requires='high_limit_trials_complete'),
-       mechanic=dict(kind='narrated_coin_loophole'),
-       hint='Scout carefully, preserve recovery, and change tactics when an attack is ineffective.'),
+       'Clear the guard at the Bridge of Judgment, then present the arena prize. Crow has a contingency if the house changes the rules.',
+       'The bridge lowers and the route to the Treasure is secured. The crew can proceed with the calling card and heist.',
+       [['Skadi']],wave_breaks={1:'bridge'},story_gate=dict(requires='high_limit_trials_complete'),
+       hint='The bridge reads deposits from High Limit cards.'),
     _n('casino-heist','Leviathan and the Escape','HEIST',
-       'On the planned heist, Sae becomes Leviathan. Her roulette is another rigged game. This terminal encounter compresses its exposure into a conventional boss battle.',
+       'Sae insists on one more game at her own wheel. Catch the rigging before she can turn it against the crew.',
        'Sae is defeated. Joker draws the pursuit and is captured; the interrogation and the team\'s deception lead into the hunt for Shido. This is not a routine treasure theft ending.',
        [['Sae Leviathan']],story_gate=dict(requires='planned_calling_card_and_heist'),
-       mechanic=dict(kind='adapted_boss',not_implemented=['roulette','special_assignment']),
-       hint='Scout carefully, preserve recovery, and change tactics when an attack is ineffective.'),
+       mechanic=dict(kind='roulette_boss'),
+       hint='Guard through the first spin. When Oracle spots the glass, use the special action to break it.'),
 )
 CHAPTERS = (dict(id='casino',title="Sae's Casino",brief='Beat a house built on rigged justice.',
                  completion='The arrest is part of a larger plan.',nodes=NODES),)

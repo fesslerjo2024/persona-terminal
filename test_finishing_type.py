@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import cinema
 import cutins
+from battle_ui import ESC
 from campaign_state import Campaign
 from finishing_type import MARKS
 from test_animation_gallery import Surface
@@ -32,15 +33,54 @@ class FinishingTypeTests(unittest.TestCase):
             for t in (.1,2.0,cutins.duration(title)-.1):
                 self.assertEqual(cinema.paint(title,t,95,34),cinema.paint(title,t,95,34,finishing=False))
 
-    def test_combat_checks_knockout_before_showing_finishing_text(self):
-        from types import SimpleNamespace
-        with tempfile.TemporaryDirectory() as d:
-            app=Surface(Campaign(Path(d)/'slot.json'))
-            app.battle_init()
-            title=cutins.ALL_OUT['Joker'][0]
-            app._b_start_cut(cutins.ALL_OUT['Joker'],1)
-            for alive in (True,False):
-                app._b_cut_damage=((),1,(SimpleNamespace(alive=alive),))
-                with patch('battle_ui.time.monotonic',return_value=3),patch.object(app,'draw_cutin') as draw:
+    def test_direct_outcome_is_not_changed_by_following_burn_or_skip(self):
+        from battle_engine import Battle
+        for direct in (True,False):
+            with self.subTest(direct=direct), tempfile.TemporaryDirectory() as d:
+                slot=Path(d)/'slot.json'
+                app=Surface(Campaign(slot))
+                app.battle_init()
+                b=Battle(('Violet','Noir'),'Finisher fixture',seed=7,shuffle_turns=False,
+                         encounter_config={'waves':[['Bicorn']], 'party_size':3})
+                app._b_battle=b
+                foe=b.enemies[0]
+                b.allies[1].down=True
+                foe.max_hp=200
+                foe.hp=b.allout_damage+(0 if direct else 2)
+                foe.status='burn'
+                foe.status_turns=2
+                foe.down=True
+                b.one_more=True
+                b.order=[b.allies[0],foe,*b.allies[1:]]
+                b.cursor=0
+                with patch('battle_ui.time.monotonic',return_value=1.0):
+                    app._b_apply('allout')
+                self.assertEqual(b.phase,'win')
+                self.assertEqual(tuple(e[2] for e in b.damage_events),(0,) if direct else (2,0))
+                self.assertIs(b.cut_in.finishing,direct)
+                self.assertEqual(b.cut_in.cast,('Joker','Noir'))
+                self.assertEqual(b.cut_in.targets,1)
+                with patch('battle_ui.time.monotonic',return_value=3.0), patch.object(app,'draw_cutin',wraps=app.draw_cutin) as draw:
                     app.battle_page()
-                draw.assert_called_once_with(title,2,finishing=not alive)
+                draw.assert_called_once_with(cutins.ALL_OUT['Joker'][0],2.,finishing=direct,
+                                             cast=('Joker','Noir'),targets=1)
+                self.assertEqual(any(MARKS['Joker'][0] in row for row in app.out),direct)
+                before=b.log[:]
+                with patch('battle_ui.time.monotonic',return_value=3.01):
+                    self.assertTrue(app.battle_key(ESC))
+                self.assertIsNone(app._b_cut_in)
+                self.assertEqual(b.log,before)
+                self.assertFalse(slot.exists())
+
+    def test_authored_charge_draws_live_cast_and_impact_outcome(self):
+        title=cutins.ALL_OUT['Joker'][0]
+        for w,h in ((64,25),(95,34)):
+            with self.subTest(w=w,h=h):
+                dry=cinema.paint(title,.22,w,h,cast=('Joker','Mona'),targets=1)
+                royal=cinema.paint(title,.22,w,h,cast=('Joker','Noir','Violet'),targets=3)
+                self.assertNotEqual(dry,royal)
+                # The typography begins much later, so a change here
+                # demonstrates real motion specific to the impact outcome.
+                lethal=cinema.paint(title,.75,w,h,cast=('Joker','Noir'),targets=2,finishing=True)
+                survives=cinema.paint(title,.75,w,h,cast=('Joker','Noir'),targets=2,finishing=False)
+                self.assertNotEqual(lethal,survives)

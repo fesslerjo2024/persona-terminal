@@ -135,6 +135,14 @@ def _decode(raw, *, testing=False):
     for name, skills in personas.items():
         if name not in PERSONA_DATA or not _valid_names(skills, SKILLS):
             raise ValueError('Invalid Persona collection entry.')
+    # Older V1 saves do not identify how extra moves were learned. Those
+    # moves remain protected; only explicitly tracked inheritance is mutable.
+    inheritance = value.get('fusion_skills', {})
+    if not isinstance(inheritance, dict) or any(
+            name not in personas or not isinstance(skill, str)
+            or skill not in personas[name]
+            for name, skill in inheritance.items()):
+        raise ValueError('Invalid fusion skill provenance.')
     if not _valid_names(loadout, set(personas)) or not 1 <= len(loadout) <= value['slots']:
         raise ValueError('Invalid Persona loadout.')
     if value.get('primary') not in loadout:
@@ -400,7 +408,7 @@ class Campaign:
         return (self.status == 'ready' and node_id in _ordered_nodes()
                 and (node_id == self.next_node or node_id in self._data['cleared']))
 
-    def clear(self, node_id, grade=None):
+    def clear(self, node_id, grade=None, *, contract=None):
         grade = 'B' if grade is None else grade
         if not isinstance(grade, str) or grade not in MEDALS:
             return self._fail('Invalid combat medal.')
@@ -414,7 +422,12 @@ class Campaign:
                 self._commit(value)
             return {}
         try:
-            rewards = _apply_rewards(value, _reward_mapping(self.get_node(node_id)))
+            node = self.get_node(node_id)
+            proposed = _reward_mapping(node)
+            if contract is not None:
+                from shadow_contract import merge_reward
+                proposed = merge_reward(node, value['personas'], proposed, contract)
+            rewards = _apply_rewards(value, proposed)
         except (ValueError, TypeError) as exc:
             return self._fail(str(exc))
         value['cleared'][node_id] = grade
@@ -492,25 +505,57 @@ class Campaign:
                 donors[donor] = [skill for skill in self.persona_spec(donor)['skills']
                                  if skill not in base_skills
                                  and not SKILLS[skill].get('enemy_only', False)]
-        reason = ('Already registered.' if name in owned else
-                  'Missing parents: ' + ', '.join(missing) if missing else
+        reason = ('Missing parents: ' + ', '.join(missing) if missing else
                   'Insufficient credits.' if self._data['credits'] < cost else '')
         return {'recipe': copy.deepcopy(recipe), 'donors': donors, 'reason': reason,
-                'available': not reason}
+                'available': not reason, 'registered': name in owned}
 
-    def fuse(self, name, skill=None, donor=None):
+    def fusion_preview(self, name, skill=None, donor=None):
+        """Resolve exact changes without charging or touching the save."""
         options = self.fusion_options(name)
+        saved = list(self._data['personas'].get(name, ()))
+        current = self._data.get('fusion_skills', {}).get(name)
+        preserved = [move for move in saved if move != current]
+        changed = preserved + ([skill] if skill is not None else [])
+        spec = self.persona_spec(name)
+        base = list(PERSONA_DATA[name]['skills'])
+        after = _unique(base + changed)
+        old = spec['skills'] if options['registered'] else []
+        reason = options['reason']
+        if not reason:
+            if skill is not None and skill not in options['donors'].get(donor, ()):
+                reason = 'The selected parent cannot pass down that skill.'
+            elif skill is None and donor is not None:
+                reason = 'Choose a skill to inherit from that parent.'
+            elif skill is not None and skill in preserved:
+                reason = 'Already known. Your protected copy stays.'
+            elif len(after) > MAX_PERSONA_SKILLS:
+                reason = 'No free skill slot. Existing learned skills stay protected.'
+            elif options['registered'] and skill == current:
+                reason = 'No change to this Persona.'
+        return {**options, 'available': not reason, 'reason': reason,
+                'current': current, 'selected': skill, 'preserved': preserved,
+                'after': after, 'moves': changed,
+                'gains': [move for move in after if move not in old],
+                'losses': [move for move in old if move not in after]}
+
+    def fuse(self, name, skill=None, donor=None, *, revise=False):
+        options = self.fusion_preview(name, skill, donor)
+        if options['registered'] and not revise:
+            return self._fail('Already registered. Confirm re-fusion to revise it.')
+        if revise and not options['registered']:
+            return self._fail('This Persona is not yet registered.')
         if not options['available']:
             return self._fail(options['reason'])
-        if skill is not None and skill not in options['donors'].get(donor, ()):
-            return self._fail('The selected parent cannot pass down that skill.')
-        if skill is None and donor is not None:
-            return self._fail('Choose a skill to inherit from that parent.')
-        if skill is not None and len(self.persona_spec(name)['skills']) >= MAX_PERSONA_SKILLS:
-            return self._fail('This Persona has no room for a bonus skill.')
         value = self.data
         value['credits'] -= options['recipe']['cost']
-        value['personas'][name] = [skill] if skill else []
+        value['personas'][name] = options['moves']
+        if skill is not None:
+            value.setdefault('fusion_skills', {})[name] = skill
+        elif 'fusion_skills' in value:
+            value['fusion_skills'].pop(name, None)
+            if not value['fusion_skills']:
+                del value['fusion_skills']
         self._commit(value)
         return name
 
@@ -536,7 +581,8 @@ class TestingCampaign(Campaign):
     """Fully unlocked test-only state; no reads from or writes to any save."""
     __test__ = False
 
-    def __init__(self):
+    def __init__(self, *, fusion_practice=False):
+        self.fusion_practice = fusion_practice
         self.path = None
         self.status = 'ready'
         self.last_error = ''
@@ -550,7 +596,12 @@ class TestingCampaign(Campaign):
     def new_game(self):
         data = _new_data()
         data['teammates'] = [n for n in TEAM if n != 'Joker']
-        data['personas'] = {n: [] for n in PERSONA_DATA}
+        if self.fusion_practice:
+            # Results stay unregistered; Silky unlocks the full practice chain.
+            if 'Silky' in PERSONA_DATA:
+                data['personas']['Silky'] = []
+        else:
+            data['personas'] = {n: [] for n in PERSONA_DATA}
         data['slots'] = min(MAX_SLOTS, len(PERSONA_DATA))
         data['squad_slots'] = MAX_SQUAD
         data['credits'] = 9999
@@ -563,7 +614,7 @@ class TestingCampaign(Campaign):
     def can_play(self, node_id):
         return node_id in _ordered_nodes()
 
-    def clear(self, node_id, grade=None):
+    def clear(self, node_id, grade=None, *, contract=None):
         if not self.can_play(node_id):
             return self._fail('Unknown practice operation.')
         return {}  # Tests never record medals or story rewards.

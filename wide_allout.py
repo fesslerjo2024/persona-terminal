@@ -66,7 +66,7 @@ def _ghost(c,x,y,unit,phase,face=1):
     chain(c,((x,y+2),(x-stride,y+4),(x-stride*1.2,y+6)),tint)
 
 
-def _charge(c,w,h,t,palette):
+def _charge(c,w,h,t,palette,cast,targets):
     ink,shade,glow=palette
     cx,cy=(w-1)*.5,(h-1)*.48
     for i in range(w//4+8):
@@ -75,18 +75,20 @@ def _charge(c,w,h,t,palette):
         end=(cx+(w*.7+3)*cos(a),cy+(h*.78+2)*sin(a))
         start=(cx+near*w*.34*cos(a),cy+near*h*.38*sin(a))
         L(c,start,end,ink if i%3 else shade,SHARDS[(i+int(t*10))%len(SHARDS)])
-    for i,(u,x,y,face) in enumerate((('Joker',.03,.15,1),('Mona',.94,.13,-1),
-                                    ('Skull',.04,.77,1),('Panther',.93,.76,-1))):
-        px=(x+( (.44 if face==1 else .56)-x)*t)*w
+    for i,u in enumerate(cast):
+        face = 1 if i % 2 == 0 else -1
+        x = .06 if face == 1 else .93
+        y = .44 if len(cast) < 3 else (.16 if i < 2 else .77)
+        px=(x+((.44 if face==1 else .56)-x)*t)*w
         py=(y+(.38-y)*t)*h+sin(t*tau+i)*.7
         L(c,(px-17*face,py+2),(px-3*face,py+2),glow,'-')
         _ghost(c,px,py,u,t*tau*2+i,face)
-    for x in (-.08,0,.08):
-        px=cx+x*w*(1-t)
-        P(c,px-2,cy,('/\\ /\\','[:::]','/###\\'),shade,True)
+    for i in range(targets):
+        x=cx+(i-(targets-1)/2)*min(.12*w,9)*(1-.50*t)
+        P(c,x-2,cy,('/\\ /\\','[:::]','/###\\'),shade,True)
 
 
-def _impact(c,w,h,t,palette):
+def _impact(c,w,h,t,palette,targets,finishing=False):
     ink,shade,glow=palette
     cx,cy=(w-1)/2,(h-1)*.47
     n=w//3+8
@@ -103,6 +105,18 @@ def _impact(c,w,h,t,palette):
         if i%3==0:spark(c,fx,fy,glow if i%2 else ink,2)
     r=5+w*t*.43
     orbit(c,cx,cy,r,r*h/w,0,tau,glow,'*',w//3+13)
+    # A readable source and consequence at the center of the burst.
+    # Survivors recoil; a direct KO breaks contact into falling fragments.
+    for i in range(targets):
+        hand=-1 if i%2==0 else 1
+        x=cx+(i-(targets-1)/2)*min(.12*w,9)+hand*t*max(2,w*.05)
+        y=cy+max(0,t-.30)*h*.13
+        if t<.38 or not finishing:
+            P(c,x-2,y-1,('/\\ /\\','[:::]','/###\\'),shade,True)
+            spark(c,x+hand*3,y-1,'white',2)
+        elif t<.83:
+            for j in range(5):
+                P(c,x+(j-2)*2*t,y+sin(i+j)*t*h*.12,'*' if j==2 else '.',glow)
 
 
 def _floor(c,w,h,t,mark,ink,shadow):
@@ -389,13 +403,17 @@ def _finish(c,w,h,t,who):
             orbit(c,x,y,w*.22,h*.21,pi*.25+t*pi,pi*.77,rim,"'",w//4)
 
 
-def render(title,elapsed,width,height):
+def render(title,elapsed,width,height,*,cast=(),targets=0,finishing=True):
     """Return an empty label and exactly one ASCII run-frame for the viewport."""
     who=BY_TITLE[title]
     w,h=max(1,width),max(1,height)
     c=Canvas(w,h)
     t=max(0,min(elapsed,SECS[who]))
-    if t<.53:_charge(c,w,h,t/.53,PALETTES[who])
-    elif t<.84:_impact(c,w,h,(t-.53)/.31,PALETTES[who])
+    party=tuple(u for u in cast if u in PALETTES)
+    if not party:
+        party=('Joker','Mona','Skull','Panther' if who in ('Joker','Mona','Skull') else who)
+    foes=max(1,min(5,targets or 3))
+    if t<.53:_charge(c,w,h,t/.53,PALETTES[who],party,foes)
+    elif t<.84:_impact(c,w,h,(t-.53)/.31,PALETTES[who],foes,finishing)
     else:_finish(c,w,h,(t-.84)/(SECS[who]-.84),who)
     return '',c.finish()

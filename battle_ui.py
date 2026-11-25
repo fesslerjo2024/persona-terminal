@@ -2,7 +2,7 @@
 import curses as C
 import textwrap
 import time
-from cutins import duration as cutin_duration
+from cutins import CutCue, duration as cutin_duration
 import cinema
 from reel_palette import IDS as SCENE_PIGMENTS
 
@@ -22,6 +22,7 @@ AFFINITY={
 HP_FLASH=0.24
 HP_DRAIN=0.42
 HP_SETTLE=0.12
+SHORT_REPEAT_RATE=1.8
 MODIFIERS=(('attack','ATK'),('defense','DEF'),('agility','AGI'))
 
 
@@ -77,7 +78,7 @@ class BattleUI:
         for n,row in enumerate(rows[start:start+visible],start):
             title,detail,enabled=row
             a=n==i
-            p=('▶' if a else ' ')+' '+(f'{n+1:>2} ' if shortcut else '')
+            p=('▶' if a else ' ')+' '+((f'{n+1:>2} ' if n<9 else '   ') if shortcut else '')
             color=CYAN if a else WHITE if enabled else DIM
             line=(p+title)[:w].ljust(w)
             self._b_put(y+(n-start)*step,x,line,color,a,a,width=w)
@@ -130,6 +131,11 @@ class BattleUI:
         self._b_cut_in=None
         self._b_cut_damage=None
         self._b_cut_queue=[]
+        # Playback preferences and completed first views are app-session
+        # presentation only, not combat state or a save field.
+        if not hasattr(self,'_b_finished_cuts'):
+            self._b_finished_cuts=set()
+            self._b_short_repeats=False
 
     def _b_ensure(self):
         if not hasattr(self,'_b_battle'):
@@ -263,18 +269,43 @@ class BattleUI:
         if shows:
             cat,label,desc=shows[0]
             rows.append((cat,label,desc,True))
+        contracts=b.actions('contract')
+        if contracts:
+            cat,label,desc=contracts[0]
+            rows.append((cat,label,desc,True))
         return rows
 
     def _b_action_rows(self):
         return self._b_battle.actions(self._b_category,self._b_persona_view)
 
-    def _b_weak_targets(self,aid):
+    _B_EFFECTS=('drain','repel','null','weak')
+
+    def _b_known_targets(self,aid):
+        """Affinities already learned by resolving hits; never enemy internals."""
         b=self._b_battle
-        if not aid:return ()
-        spec=b._spec(aid)
-        if not spec or spec['kind']!='damage' or spec['target'] not in ('enemy','enemies'):return ()
-        targets=b.targets(aid) if spec['target']=='enemy' else b.enemies
-        return tuple(u for u in targets if u.alive and b.seen.get(u.name,{}).get(spec['element'])=='weak')
+        spec=b._spec(aid) if aid else None
+        if not spec or spec['kind']!='damage' or spec['target'] not in ('enemy','enemies'):
+            return {}
+        units=b.targets(aid) if spec['target']=='enemy' else getattr(b,'visible_enemies',b.enemies)
+        return {u:b.seen.get(u.name,{}).get(spec['element']) for u in units if u.alive}
+
+    @staticmethod
+    def _b_defense(affinity,width):
+        values=' '.join(abbr+AFFINITY[affinity[element]][0]
+            for element,abbr,_ in ELEMENTS if affinity.get(element) not in (None,'normal')
+            and affinity[element] in AFFINITY) or 'Normal'
+        # Seven tags fit in 27 columns if the optional heading is omitted.
+        return 'DEF: '+values if len(values)+5<=width else values
+
+    def _b_label_effects(self,label,effects,width):
+        tags=[]
+        for effect in self._B_EFFECTS:
+            if effect in effects:
+                tag=f'[{effect.upper()}]'
+                if len(' '.join([*tags,tag]))<=width-min(12,len(label))-1:tags.append(tag)
+        markers=' '.join(tags)
+        if markers:return label[:width-1-len(markers)]+' '+markers
+        return label
 
     def _b_turn_strip(self,y):
         b=self._b_battle
@@ -304,22 +335,23 @@ class BattleUI:
         now=time.monotonic()
         self._b_hp_trails={u:a for u,a in self._b_hp_trails.items() if now-a[1]<HP_FLASH+HP_DRAIN+HP_SETTLE}
         if self._b_outgoing and now>=self._b_outgoing[2]:self._b_outgoing=None
-        shown_wave,foes=(self._b_outgoing[:2] if self._b_outgoing else (b.wave,b.enemies))
+        shown_wave,foes=(self._b_outgoing[:2] if self._b_outgoing else (b.wave,getattr(b,'visible_enemies',b.enemies)))
         active=b.actor
         wide=self.w>=91
         split=max(32,(self.w-1)//2)
         nav='↑↓ SELECT  ↵ CONFIRM'
-        if b.phase=='interlude':
+        trial=getattr(self,'page',None)=='trials'
+        if self._b_outgoing or b.phase=='interlude' or b.phase!='turn' and not trial:
             footer=''
         elif b.phase!='turn':
             footer='↵ REMATCH  S SQUAD  L LOG  ESC MAP'
         elif self._b_screen=='command':
-            restart='R RESET' if getattr(self,'page',None)=='trials' else 'R RETRY'
+            restart='R RESET' if trial else 'R RETRY'
             footer=f'↑↓ SELECT  ↵ USE  I STATUS  L LOG  ? HELP  {restart}  ESC MAP'
         else:
-            switch='←→ PERSONA  ' if self._b_screen=='actions' and self._b_category=='skills' and active.name=='Joker' and not b.shifted else ''
+            switch='←→ PERSONA  ' if self._b_screen=='actions' and self._b_category=='skills' and active.name=='Joker' and not b.shifted and len(self._b_personas)>1 else ''
             footer=f'{switch}{nav}  I STATUS  ESC BACK'
-        self.frame('VELVET ROOM / SHADOW TRIAL' if getattr(self,'page',None)=='trials' else 'PALACE / COMBAT',footer)
+        self.frame('VELVET ROOM / SHADOW TRIAL' if trial else 'PALACE / COMBAT',footer)
         wave_line=f'WAVE {shown_wave}/{b.wave_count}  •  '+('CLEARED' if self._b_outgoing else f'ROUND {b.round}   /   {b.difficulty.upper()}')
         if len(wave_line)>split-4 and not self._b_outgoing:
             wave_line=f'{shown_wave}/{b.wave_count}  ROUND {b.round}  {b.difficulty.upper()}'
@@ -375,7 +407,11 @@ class BattleUI:
             else:
                 affinity_width=(4 if right>=44 else 2)*len(ELEMENTS)
                 self._b_mod_draw(y+1,split+affinity_width+1,right-affinity_width-1,u)
-        top=9+max(len(b.allies)*ally_step,len(foes)*enemy_step)
+        after_rosters=8+max(len(b.allies)*ally_step,len(foes)*enemy_step)
+        # Protect one menu row plus log/detail at the supported minimum height.
+        # The optional blank spacer may vanish, never a command or a foe.
+        tight=after_rosters+1>=self.h-6
+        top=after_rosters+(not tight)
         if self._b_outgoing:
             self._b_put(top,3,'WAVE CLEARED  /  NEXT FORMATION INCOMING',GOLD,True,width=self.w-6)
             return
@@ -383,66 +419,80 @@ class BattleUI:
             self._b_put(top,3,'WAVE CLEARED',GOLD,True,width=self.w-6)
             return
         if b.phase in ('win','loss'):
-            self._b_result(top)
+            if trial:self._b_result(top)
             return
         if boss_intent:
             limit=self.w-6
             text=('!  ' if len(boss_intent)+3<=limit else '')+boss_intent
             if len(text)>limit:text=text[:limit-1]+'…'
-            self._b_put(top-1,3,text,RED,True,width=limit)
-        label='COMMANDS'
+            self._b_put(3 if tight else top-1,3,text,RED,True,width=limit)
         bonus='HOLD UP!' if b.hold_up else (f'ONE MORE! · CHAIN {b.chain}' if b.one_more else '')
-        if bonus:label=bonus
-        self._b_put(top,3,label,RED if b.hold_up else GOLD if b.one_more else CYAN,True,width=(split-5 if wide else self.w-6))
-        if wide:
-            self._b_heading(top,split,getattr(b,'navigator','Oracle').upper()+' / BATTLE LOG',self.w-split-3)
         start=top+1
         end=self.h-6
         h=max(1,end-start+1)
-        commands=self._b_action_menu()
+        w=split-5 if wide else self.w-6
+        reaction=''
         if self._b_screen=='command':
-            menu=[(label,help,ok) for cat,label,help,ok in commands]
+            heading=bonus or 'COMMANDS'
+            menu=[(label,help,ok) for cat,label,help,ok in self._b_action_menu()]
         elif self._b_screen=='actions':
             menu=[]
+            reactions=[]
             for aid,action_label,detail in self._b_action_rows():
                 reason=b.action_block(aid,persona=self._b_persona_view,pick_target=True) if aid.startswith(('skill:','item:')) else None
-                weak=self._b_weak_targets(aid)
-                if weak:action_label+=' [WEAK]'
                 spec=b._spec(aid)
-                if weak and spec and spec['target']=='enemies':detail+=' · Weak: '+', '.join(u.name for u in weak)
+                known=self._b_known_targets(aid)
+                action_label=self._b_label_effects(action_label,known.values(),w-5)
+                ui_effects=[]
+                if spec and spec['target']=='enemies':
+                    for effect in self._B_EFFECTS:
+                        names=[u.name for u,affinity in known.items() if affinity==effect]
+                        if names:
+                            number=f' (+{len(names)-1})' if len(names)>1 else ''
+                            ui_effects.append(f'{effect.title()}: {names[0]}{number}')
+                reactions.append('  •  '.join(ui_effects))
                 menu.append((action_label,reason or detail,not reason))
-            category=self._b_category.upper()
+            if reactions:reaction=reactions[min(self._b_index,len(reactions)-1)]
+            heading=self._b_category.upper()
             if self._b_category=='skills':
                 name=(self._b_persona_view or b.persona) if active.name=='Joker' else self._b_team[active.name]['persona']
-                if active.name=='Joker' and name==b.persona:category='SKILLS'
-                elif active.name=='Joker':category=name+' / PREVIEW'
-                else:category=name
-            self._b_put(top,3,category+('  /  '+bonus if bonus else ''),GOLD if bonus else CYAN,True,width=split-5 if wide else self.w-6)
+                if active.name=='Joker' and name==b.persona:heading='SKILLS'
+                elif active.name=='Joker':heading=name+' / PREVIEW'
+                else:heading=name
+                # Own defenses are available data. Don't peek at an enemy's real
+                # affinities to infer what either the user or HUD has learned.
+                affinity=self._b_personas[name]['affinity'] if active.name=='Joker' else active.affinity
+                self._b_put(7,3,self._b_defense(affinity,split-5).ljust(split-5),CYAN,width=split-5)
         else:
             targets=b.targets(self._b_id)
+            known=self._b_known_targets(self._b_id)
             menu=[]
             for u in targets:
-                reason=None if self._b_id=='analyze' else b.action_block(self._b_id,u,self._b_persona_view)
-                title=('[WEAK] ' if u in self._b_weak_targets(self._b_id) else '')+u.name
+                reason=None if self._b_id in ('analyze','contract') else b.action_block(self._b_id,u,self._b_persona_view)
+                effect=known.get(u)
+                title=(f'[{effect.upper()}] ' if effect in self._B_EFFECTS else '')+u.name
                 menu.append((title,reason or '',not reason))
-            self._b_put(top,3,self._b_action_title+' → TARGET'+('  /  '+bonus if bonus else ''),GOLD,True,width=(split-5 if wide else self.w-6))
-        w=split-5 if wide else self.w-6
+            heading=self._b_action_title+' → TARGET'
+        if bonus and self._b_screen!='command':heading+='  /  '+bonus
+        more=f'{min(self._b_index+1,len(menu))}/{len(menu)}' if len(menu)>h else ''
+        self._b_put(top,3,heading,RED if b.hold_up else GOLD if b.one_more else CYAN,True,width=w-(len(more)+1 if more else 0))
+        if more:self._b_put(top,3+w-len(more),more,DIM)
         picked=self._b_list(menu,start,3,w,h,self._b_index,details=False)
-        if len(menu)>h:
-            more=f'{min(self._b_index+1,len(menu))}/{len(menu)}'
-            self._b_put(top,3+w-len(more),more,DIM,width=len(more))
         if wide:
+            self._b_heading(top,split,getattr(b,'navigator','Oracle').upper()+' / BATTLE LOG',self.w-split-3)
             for y in range(top+2,self.h-4):
                 self._b_put(y,split-3,'│',DIM)
-            self._b_log_draw(top+2,split,self.w-split-3,h)
+            self._b_log_draw(top+2,split,self.w-split-3,max(0,h-1))
         reason=self._b_message or (picked[1] if picked and not picked[2] else '')
-        if reason and len(reason)>self.w-6:
-            self._b_par(self.h-5,3,reason,self.w-6,2,GOLD)
+        if reason:
+            self._b_par(self.h-5 if len(reason)>self.w-6 else self.h-4,3,reason,self.w-6,2,GOLD)
         else:
-            if not wide and b.log:
+            if reaction:
+                self._b_put(self.h-5,3,reaction,GOLD,width=self.w-6)
+            elif not wide and b.log:
                 self._b_put(self.h-5,3,str(b.log[-1]),WHITE,width=self.w-6)
-            hint=reason or (picked[1] if picked else '')
-            if hint:self._b_put(self.h-4,3,hint,GOLD if reason else DIM,width=self.w-6)
+            hint=picked[1] if picked else ''
+            if hint:self._b_put(self.h-4,3,hint,DIM,width=self.w-6)
 
     def _b_log_draw(self,y,x,w,count,offset=0):
         lines=[]
@@ -469,10 +519,12 @@ class BattleUI:
         elif self._b_overlay=='status':
             self.frame(getattr(b,'navigator','Oracle').upper()+' / FIELD STATUS','ESC BACK')
             cols=(self.w-6)//2
-            for title,roster,x,color in (('PHANTOM THIEVES',b.allies,3,CYAN),('SHADOWS',b.enemies,5+cols,RED)):
+            foes=getattr(b,'visible_enemies',b.enemies)
+            self._b_put(3,3,'DEF: W Weak · R Resist · N Null · P Repel · D Drain',DIM,width=self.w-6)
+            for title,roster,x,color in (('PHANTOM THIEVES',b.allies,3,CYAN),('SHADOWS',foes,5+cols,RED)):
                 self._b_put(4,x,title,color,True,width=cols-2)
                 for i,u in enumerate(roster):
-                    y=6+i*3
+                    y=5+i*(4 if roster is b.allies else 3)
                     state='KO' if not u.alive else ' '.join(item for item in (
                         'DOWN' if u.down else '', 'GUARD' if u.guard else '', str(u.status).upper()) if item)
                     self._b_put(y,x,u.name+(f' [{state}]' if state else ''),WHITE,True,width=cols-2)
@@ -480,7 +532,9 @@ class BattleUI:
                     if getattr(u,'max_ammo',0):flags+=f'  GUN {u.ammo}'
                     self._b_put(y+1,x,flags,DIM,width=cols-2)
                     self._b_mod_draw(y+2,x,cols-2,u)
-            if any(self._b_modifiers(u) for u in b.allies+b.enemies):
+                    if roster is b.allies:
+                        self._b_put(y+3,x,self._b_defense(u.affinity,cols-2),CYAN,width=cols-2)
+            if any(self._b_modifiers(u) for u in (*b.allies,*foes)):
                 self._b_put(self.h-4,3,'↑ Buff   ↓ Debuff   Number = turns left',DIM,width=self.w-6)
         elif self._b_overlay=='intel':
             self.frame(getattr(b,'navigator','Oracle').upper()+' / AFFINITY SCAN','ESC BACK')
@@ -495,7 +549,12 @@ class BattleUI:
                 color=GOLD if v=='weak' else DIM if v=='unknown' else CYAN
                 self._b_put(9+i//3*2,3+(i%3)*spacing,f'{e.upper():<9} {v.upper()}',color,width=spacing-1)
         elif self._b_overlay=='help':
-            self.frame(getattr(b,'navigator','Oracle').upper()+' / TACTICS','ESC BACK')
+            controls='ESC BACK'
+            if getattr(b,'story',False):
+                controls='C REPEATS: '+('SHORT' if self._b_short_repeats else 'FULL')+'  '+controls
+            self.frame(getattr(b,'navigator','Oracle').upper()+' / TACTICS',controls)
+            if getattr(b,'story',False):
+                self._b_put(3,3,'Short speeds up clips you have already finished.',DIM,width=self.w-6)
             topics=[
                 ('AFFINITIES','? Unknown · Normal W Weak R Resist N Null P Repel D Drain'),
                 ('PERSONA SWITCH','Joker can preview skills without changing masks. Using one equips the new Persona.'),
@@ -518,7 +577,7 @@ class BattleUI:
                  'The current fight can be resumed.',
                  self.w-6,3,WHITE)
 
-    def draw_cutin(self,title,elapsed=0.0,*,finishing=True):
+    def draw_cutin(self,title,elapsed=0.0,*,finishing=True,cast=(),targets=0):
         """Only paint the animation. Names and controls belong to the menu."""
         if not cinema.has(title):
             # Defensive fallback for unknown future events, with no captions.
@@ -527,7 +586,7 @@ class BattleUI:
                 self._b_put(self.h//2+dy,self.w//2-size-1,'*',GOLD)
                 self._b_put(self.h//2+dy,self.w//2+size+1,'*',GOLD)
             return
-        _,rows=cinema.paint(title,elapsed,self.w-1,self.h,finishing=finishing)
+        _,rows=cinema.paint(title,elapsed,self.w-1,self.h,finishing=finishing,cast=cast,targets=targets)
         self.draw_scene_rows(rows)
 
     def draw_scene_rows(self,rows):
@@ -551,8 +610,9 @@ class BattleUI:
             self._b_over()
         elif self._b_cut_in:
             title,_,started,_=self._b_cut_in
-            foes=self._b_cut_damage[2] if self._b_cut_damage else ()
-            self.draw_cutin(title,now-started,finishing=bool(foes) and not any(u.alive for u in foes))
+            cue=self._b_cue
+            elapsed=(now-started)*self._b_cut_rate
+            self.draw_cutin(title,elapsed,finishing=cue.finishing,cast=cue.cast,targets=cue.targets)
         elif self._b_screen=='setup':
             self._b_setup_draw()
         else:
@@ -578,7 +638,12 @@ class BattleUI:
             self._b_outgoing=(old_wave,old_foes,now+HP_FLASH+HP_DRAIN+HP_SETTLE)
 
     def _b_start_cut(self,card,now):
-        self._b_cut_in=(*card,now,now+cutin_duration(card[0]))
+        cue=card if isinstance(card,CutCue) else CutCue(*card)
+        self._b_cue=cue
+        mode='testing' if getattr(self,'testing',False) else 'trials' if getattr(self,'page',None)=='trials' else 'story'
+        self._b_cut_key=(mode,cue.title,cue.finishing)
+        self._b_cut_rate=SHORT_REPEAT_RATE if self._b_short_repeats and self._b_cut_key in self._b_finished_cuts else 1.0
+        self._b_cut_in=(cue.title,cue.description,now,now+cutin_duration(cue.title)/self._b_cut_rate)
 
     def _b_present_action(self,b,old_wave,old_foes,now):
         cut=getattr(b,'cut_in',None)
@@ -590,6 +655,8 @@ class BattleUI:
             self._b_show_damage(b.damage_events,old_wave,old_foes,now)
 
     def _b_release_cut(self,now):
+        if self._b_cut_in and now>=self._b_cut_in[3]:
+            self._b_finished_cuts.add(self._b_cut_key)
         if self._b_cut_queue:
             self._b_start_cut(self._b_cut_queue.pop(0),now)
             return
@@ -652,6 +719,9 @@ class BattleUI:
         kl=k.lower() if isinstance(k,str) else k
         if self._b_overlay:
             overlay=self._b_overlay
+            if overlay=='help' and kl=='c' and getattr(b,'story',False):
+                self._b_short_repeats=not self._b_short_repeats
+                return True
             if k==ESC or overlay=='intel' and k in ENTER or overlay=='status' and kl=='i' or overlay=='log' and kl=='l' or overlay=='help' and k in ('?','h','H'):
                 self._b_overlay=None
                 return True
@@ -754,7 +824,7 @@ class BattleUI:
                 self._b_message=b.command_block(cat)
                 return True
             self._b_message=''
-            if cat in ('attack','gun','guard','analyze','allout','story-special','showtime') and len(b.actions(cat))==1:
+            if cat in ('attack','gun','guard','analyze','allout','story-special','showtime','contract') and len(b.actions(cat))==1:
                 aid,atitle,_=b.actions(cat)[0]
                 self._b_target_back='command'
                 self._b_target_back_index=choose

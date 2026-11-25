@@ -1,9 +1,9 @@
 """Royal late chapters, compressed into original terminal operations.
 
 This is an adapted combat campaign, not an exact dungeon/boss recreation.
-Puzzle actions and calendar transitions are narrated; story_gate and mechanic
-metadata document integration points, not executable minigames. Named bosses
-use terminal-balanced loadouts, not claimed canonical stats or affinities.
+Calendar transitions and some traversal puzzles are narrated. The two
+finale battles have playable scripts and use terminal-balanced loadouts,
+not claimed canonical stats or affinities.
 Primary evidence: English game scripts at https://mysh.dev/tools/persona/5r/
 and original recorded play at https://bai-gaming.com/guides/persona5royal/ .
 """
@@ -11,6 +11,8 @@ from copy import deepcopy
 from battle_data import shadow
 from shuffle_data import SHUFFLE_ENEMIES
 from casino_data import LATE_PAIRS
+from depths_boss import ENEMY_ADDITIONS as DEPTHS_ENEMIES, DEPTHS_FINAL_WAVES
+from lab_boss import ENEMY_ADDITIONS as LAB_ENEMIES, WAVES as LAB_FINAL_WAVES
 
 _NORMALS = ('Power','Ose','Rangda','Skadi','Narcissus','Dakini','Garuda',
             'Cerberus','Kali','Hanuman','Melchizedek','Moloch','Abaddon',
@@ -34,30 +36,35 @@ for name,hp,skills in (
     ('Wings of Human Sacrifice',470,['Maragion','Mabufula','Mazionga']),
     ('Tomb of Human Sacrifice',500,['Megido','Marakukaja']),
     ('Shido Samael',680,['Tempest Slash','Matarukaja','Dekaja','Megido']),
-    ('Shido Final Duel',440,['Agilao','Bufula','Zionga','Garula','Rising Slash']),
     ('Holy Grail First Encounter',650,['Megido','Marakukaja']),
     ('Uriel',440,['Maragion','Tempest Slash']),
     ('Raphael',470,['Sword Dance','Rakukaja']),
     ('Gabriel',470,['Mabufula','Diarama']),
     ('Michael',600,['Makouga','Sword Dance','Debilitate']),
-    ('Holy Grail Unbound',720,['Megido','Matarunda','Marakukaja']),
-    ('Yaldabaoth',1200,['Megidola','Matarunda','Dekaja','Riot Gun']),
     ('Laboratory Guardian',540,['Mapsio','Rakukaja','Megido']),
-    ('Maruki Azathoth',1000,['Megidola','Mapsio','Matarunda','Dekaja']),
-    ('Azathoth Tendril',230,['Rising Slash','Tarunda']),
-    ('Adam Kadmon',1200,['Megidola','Rising Slash','Matarukaja']),
 ):
     _boss(name,hp,skills)
 
 
-# Joker/Crow opens in the January story; Violet's Confidant requirement is not simulated.
+ENEMY_ADDITIONS['Shido Final Duel'] = shadow(
+    440,100,['Agilao','Bufula','Zionga','Garula','Rising Slash'],{},'cruiser-solo',
+    no_knockdown=True,adaptation='Telegraphed elements with a distinct Physical follow-up.')
+
+
+ENEMY_ADDITIONS.update(DEPTHS_ENEMIES)
+ENEMY_ADDITIONS.update(LAB_ENEMIES)
+
+# Royal unlocks the latter pair at a hideout meeting after Rank 10 Faith.
+# The late briefing after the tests is the combat campaign's substitute.
 _LAB_PAIRS = LATE_PAIRS + (('Joker','Crow'),)
+_LAB_BOND_PAIRS = _LAB_PAIRS + (('Joker','Violet'),)
 
 
 def _n(id,title,mark,before,after,waves,*,hint=None,gate=None,mechanic=None,
        recruits=(),**extra):
     pairs = () if extra.get('party_size') == 1 else (
         () if id == 'laboratory-reality' else
+        _LAB_BOND_PAIRS if id in ('laboratory-colors','laboratory-choice') else
         _LAB_PAIRS if id.startswith('laboratory-') else LATE_PAIRS)
     extra.setdefault('showtime_pairs',pairs)
     if id.startswith(('cruiser-','depths-')):
@@ -97,7 +104,8 @@ CRUISER = (
     'Shido has forced Joker into a one-on-one finish. The final duel is separated into its own operation for terminal pacing.',
     'Shido falls. His attempt to collapse the Palace forces an escape. His confession still does not free society from its desire to surrender responsibility.',
     [['Shido Final Duel']],party_size=1,forbidden_team=['Crow'],
-    hint='Solo operation: keep a recovery option and do not spend every turn attacking.'),
+    solo_threats=('Ice','Fire','Electric','Wind'),
+    hint='Switch or Guard against the announced element. Guard makes Shido overextend, opening a turn to recover or strike.'),
 )
 DEPTHS = (
  _n('depths-prison','The Prison Beneath Tokyo','CELLS',
@@ -124,10 +132,11 @@ DEPTHS = (
     'The path reaches the temple. The Grail no longer has a prison full of willing supporters to conceal its nature.',
     [['Gabriel'],['Michael']],forbidden_team=['Crow','Violet']),
  _n('depths-yaldabaoth','The God of Control','FREEDOM',
-    'The Grail reveals Yaldabaoth. This adaptation uses two combat waves; the original multi-arm battle and final public rally are represented in the story.',
+    'The Grail feeds through its supply lines. Sever them, then confront Yaldabaoth and the arms it manifests.',
     'The public rallies behind the Thieves. Joker manifests Satanael for the decisive shot, ending the god of control. The Royal branch continues only if its earlier story conditions were met.',
-    [['Holy Grail Unbound'],['Yaldabaoth']],forbidden_team=['Crow','Violet'],
-    mechanic=dict(kind='adapted_boss',not_implemented=['separate_arms','sin_effects','Satanael_finisher'])),
+    DEPTHS_FINAL_WAVES,forbidden_team=['Crow','Violet'],
+    hint='Cut the lines when Oracle finds the opening. Break the god’s arms to weaken its charge.',
+    mechanic=dict(kind='grail_arms_and_finisher')),
 )
 LABORATORY = (
  _n('laboratory-reality','A World Without Loss','TRUTH',
@@ -146,7 +155,7 @@ LABORATORY = (
     [['Macabre','Byakhee'],['Laboratory Guardian']],gate=dict(requires='daat_control_room_resolved')),
  _n('laboratory-counseling','Answers He Wants to Hear','TESTS',
     'The special consultations reward answers that match Maruki\'s standards, not the player\'s own beliefs. In this version the team navigates the tests in narration.',
-    'Beyond the consultations, the laboratory opens onto the colored paths of the final ascent.',
+    'Back at the hideout, Violet shows Joker a routine in her own style. Their new Showtime is ready for the final approach.',
     [['Scathach','Nebiros']],mechanic=dict(kind='narrated_consultations',canonical_answers=['B','C','D'])),
  _n('laboratory-colors','A Path Toward Eden','COLORS',
     'Color controls switch the light bridges through the Twilight Corridor. The Thieves reach the treasure route, then return for the final decision and calling card.',
@@ -154,11 +163,12 @@ LABORATORY = (
     [['Fafnir'],['Baal']],gate=dict(requires='research_and_consultations'),
     mechanic=dict(kind='narrated_color_bridges')),
  _n('laboratory-choice','Our Own Tomorrow','CHOICE',
-    'Maruki and Azathoth defend the imposed reality. This terminal version compresses the changing tendrils and action restrictions into conventional waves, followed by Adam Kadmon.',
+    'Maruki has one tendril to protect Azathoth, one to strengthen it and one to heal it. Break the protection and hit the core.',
     'The Thieves create Joker\'s opening against Adam Kadmon. Maruki and Joker\'s final human struggle ends the Palace; they return to an uncertain future they can choose for themselves.',
-    [['Azathoth Tendril','Azathoth Tendril'],['Maruki Azathoth'],['Adam Kadmon']],
+    LAB_FINAL_WAVES,
     gate=dict(requires='route_secured_and_final_offer_rejected_and_calling_card'),
-    mechanic=dict(kind='adapted_boss',not_implemented=['changing_tendril_affinities','action_bans','scripted_guard_finish','human_fistfight'])),
+    hint='Read the shifted tendril affinities. If Full Force is charging, guard with every standing ally.',
+    mechanic=dict(kind='azathoth_tendrils_and_kadmon',not_implemented=['human_fistfight'])),
 )
 
 CHAPTERS = tuple(dict(id=id,title=title,brief=brief,completion=completion,nodes=nodes)

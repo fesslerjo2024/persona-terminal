@@ -121,7 +121,7 @@ NODES = (
          brief='Okumura protects himself with disposable units. Break their formation before he can call a new shift.',
          story_before='Mona turns down the offer. Okumura orders his workers to protect him, then shows Noir how readily he would discard even an image of his daughter.',
          story_after='The crew takes the Treasure and escapes. A masked intruder strikes Shadow Okumura after they leave. Later, Okumura collapses during his televised confession and public suspicion turns on the Thieves.',
-         hint='Clear each robot rank together by chaining Baton Passes. When the executive machine starts charging, or the cognitive copy is ordered to self-destruct, stop the attack or Guard.',
+         hint='Drop all three workers in a rank by the end of round 2 or they get one full reissue. Chain weakness hits and Baton Passes. Guard against the charges that follow.',
          preview='Five worker ranks, an executive unit, the cognitive copy, then the exposed ruler.',
          waves=[[name]*3 for name in _FLOOR_RANKS]+[
             ['Execurobo MDL-ED'],['Cognitive Haru'],['Shadow Okumura']],

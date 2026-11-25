@@ -7,6 +7,7 @@ class NativeClip(NamedTuple):
     seconds: float
     draw: object
     finisher: str | None = None
+    contextual: bool = False
 
 
 def _merge(*sets):
@@ -38,9 +39,9 @@ def _native_catalog():
     return _merge(
         {WRESTLING: NativeClip(wide_wrestling.SECONDS, wide_wrestling.render)},
         {title: NativeClip(seconds, partial(wide_oracle.render, title),
-                          'Oracle' if title == wide_oracle.TITLE else None)
+                          'Oracle' if title == wide_oracle.TITLE else None, True)
          for title, (seconds, _, _) in wide_oracle._SCENES.items()},
-        {title: NativeClip(wide_allout.SECS[actor], partial(wide_allout.render, title), actor)
+        {title: NativeClip(wide_allout.SECS[actor], partial(wide_allout.render, title), actor, True)
          for title, actor in wide_allout.BY_TITLE.items()},
         bind(native_diner.render, {native_diner.TITLE: native_diner.SECONDS}),
         bind(native_openers.render, {
@@ -61,10 +62,11 @@ def duration(title):
     return clip.seconds if clip is not None else 0.0
 
 
-def paint(title,t,width,height,*,finishing=True):
+def paint(title,t,width,height,*,finishing=True,cast=(),targets=0):
     """Draw directly at the current viewport size, never from a legacy cel."""
     clip = _native_catalog()[title]
-    beat,frame = clip.draw(t,width,height)
+    context = dict(cast=cast,targets=targets,finishing=finishing) if clip.contextual else {}
+    beat,frame = clip.draw(t,width,height,**context)
     if finishing and clip.finisher is not None:
         from finishing_type import apply
         frame = apply(frame,clip.finisher,t,width,height)

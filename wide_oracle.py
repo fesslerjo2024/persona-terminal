@@ -5,6 +5,7 @@ lines, details, and silhouettes are drawn anew at each size.
 """
 from math import cos, pi, sin, sqrt, tau
 
+from allout_scenes import HEAD
 from oracle_scene import GUARD, SUPPORT, TITLE
 from wide_canvas import Canvas
 
@@ -139,6 +140,8 @@ READY = (
     ('   _<>  ', '  /==\\  ', '  \\_/>  ', ' _/\\Y/\\_', '  / V\\  ', ' /   |  ', '  /|/   ', ' _/ \\_  '),
 )
 INKS = ('red', 'cyan', 'gold', 'white')
+CAST_INK = dict(Joker='red',Mona='cyan',Skull='gold',Panther='rose',Fox='cyan',
+                Queen='teal',Noir='violet',Crow='red',Violet='rose')
 SHADOW = ('^--_  _--^', '/(*)(*)\\', '\\ _WW_ /', '/###|###\\', '\\_######_/', '/_ /\\ _\\', '<_/    \\_>')
 CROUCH = (' _/..\\_ ', '/_\\##/_\\', '  /_/\\_\\', '_/     \\_')
 BRACE = ('  .--.  ', ' [====] ',r'_/\##/\_', ' /|##|\\ ', '/_    _\\', '\\_>  <_/')
@@ -152,22 +155,33 @@ def _figure(c,x,y,rows,ink):
         c.put(x-len(row)//2+left,y+j,row.strip(),ink,True)
 
 
-def _squad(c,w,h,t,ground,mode):
-    group = (.15,.27,.39,.51) if mode == 'guard' else (.19,.39,.60,.81)
+def _lanes(size):
+    return tuple(.5 + (i-(size-1)/2)*.205 for i in range(size))
+
+
+def _squad(c,w,h,t,ground,mode,cast=()):
+    group = (.15,.27,.39,.51) if mode == 'guard' else _lanes(len(cast) or 4)
     for i, frac in enumerate(group):
         x = round(w*frac)
         y = ground+round(h*(.08+(i%2)*.04))
+        form=READY[i]
+        ink=INKS[i]
+        if cast:
+            name=cast[i]
+            form=(*HEAD.get(name,form[:2]),*form[2:])
+            ink=CAST_INK.get(name,ink)
         if mode=='guard':
             braced = .8 < t < 1.85
-            _figure(c,x,y-(5 if braced else 7),BRACE if braced else READY[i],INKS[i])
+            _figure(c,x,y-(5 if braced else 7),BRACE if braced else form,ink)
         else:
             ready = t >= 1.10 + i*.13
             c.put(x-4,y+1,'.........','dim')
-            _figure(c,x,y-(7 if ready else 3),READY[i] if ready else CROUCH,INKS[i])
+            _figure(c,x,y-(len(form)-1 if ready else 3),form if ready else CROUCH,ink)
 
 
-def _payload(c,w,h,t,ground):
-    impact_x, impact_y = round(w*.60), round(h*.86)
+def _payload(c,w,h,t,ground,targets=0):
+    impact_x, impact_y = round(w*.60), round(h*(.79 if h<30 else .84))
+    targets=max(1,min(5,targets or 1))
     tick = round(t*36)
     fly = _p(t,0,.88)
     leave = _p(t,2.12,3.15)
@@ -177,7 +191,9 @@ def _payload(c,w,h,t,ground):
     hull = round(w*(.36+.17*fly-.10*leave))
     deck = sy+max(3,round(h*.17))+4
     if t<1.70:
-        _figure(c,impact_x,impact_y-6,SHADOW,'foe')
+        separation=max(7,min(12,w//8))
+        for i in range(targets):
+            _figure(c,round(impact_x+(i-(targets-1)/2)*separation),impact_y-6+(i%2),SHADOW,'foe')
         if scan:
             _beam(c,sx,deck,impact_x,impact_y,max(3,round(w*.20*scan)),tick,'green')
             if t>.44:
@@ -188,6 +204,7 @@ def _payload(c,w,h,t,ground):
             for j in range(3):
                 c.put(bx-j%2,by-j-1,'.*+'[j],'gold')
             _figure(c,bx,by,(' ,*','_/_','/##\\','\\__/'),'gold')
+            c.put(bx,by+1,'*','white')
     elif t<2.69:
         f = _p(t,1.70,2.69)
         _flare(c,impact_x,impact_y,w,h,f,('gold','white','red'))
@@ -205,11 +222,12 @@ def _payload(c,w,h,t,ground):
     return 'flyover' if t<.88 else 'payload' if t<1.70 else 'blast' if t<2.69 else 'depart'
 
 
-def _support(c,w,h,t,ground):
+def _support(c,w,h,t,ground,cast=()):
     sx,sy = _pos(w,h,.50+.045*sin(t*4),-.21+.25*_p(t,0,.65)-.26*_p(t,2.36,2.85))
     tick = round(t*32)
     deck = sy+max(3,round(h*.17))+4
-    for i, frac in enumerate((.19,.39,.60,.81)):
+    group=_lanes(len(cast) or 4)
+    for i, frac in enumerate(group):
         x, y = _pos(w,h,frac,.79+(i%2)*.04)
         delay = .42+i*.12
         f = _p(t,delay,delay+.43)
@@ -223,9 +241,9 @@ def _support(c,w,h,t,ground):
                 yr = max(deck+1,y-round((p+j*.07)%1*h*.29))
                 xr = x+round(sin(j*16+t*9)*width*.9)
                 c.put(xr,yr,'+.*'[j%3],'green')
-    _squad(c,w,h,t,ground,'support')
-    for i in range(4):
-        x,y = _pos(w,h,(.19,.39,.60,.81)[i],.62)
+    _squad(c,w,h,t,ground,'support',cast)
+    for i, frac in enumerate(group):
+        x,y = _pos(w,h,frac,.62)
         if 1.1+i*.13 < t < 1.58+i*.13:
             _flare(c,x,y,max(12,w//5),h,.48*_p(t,1.1+i*.13,1.58+i*.13),('green','cyan','white'))
     _ship(c,sx,sy,round(w*.45),h,tick)
@@ -281,11 +299,13 @@ _SCENES = {TITLE:(3.25,_payload,'green'), SUPPORT:(2.85,_support,'cyan'),
            GUARD:(2.90,_guard,'cyan')}
 
 
-def render(title, elapsed, width, height):
+def render(title, elapsed, width, height, *, cast=(), targets=0, finishing=True):
     """Render one native-size (beat, rows) frame without persistent state."""
     duration,draw,ink = _SCENES[title]
     t = max(0,min(duration,elapsed))
     c = Canvas(width,height)
     ground = _starfield(c,width,height,t,ink)
-    beat = draw(c,width,height,t,ground)
+    context = (dict(cast=tuple(cast[:4])) if title==SUPPORT else
+               dict(targets=targets) if title==TITLE else {})
+    beat = draw(c,width,height,t,ground,**context)
     return beat,c.finish()

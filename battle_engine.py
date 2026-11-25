@@ -1,8 +1,9 @@
 """Offline Velvet Room combat rules. Scenario numbers are tuned for this simulation."""
 from dataclasses import dataclass,field
 import random, math
-from cutins import ORACLE_SUPPORT, all_out as all_out_cut, showtime as showtime_cut
+from cutins import CutCue, ORACLE_SUPPORT, all_out as all_out_cut, showtime as showtime_cut
 from battle_data import SKILLS, TEAM, PERSONAS, ITEMS, ENEMIES, ENCOUNTERS
+import shadow_contract
 
 DEFAULT_ATTACK=dict(kind='damage',element='Physical',power=29,target='enemy',accuracy=96)
 DEFAULT_GUN=dict(kind='damage',element='Gun',power=24,target='enemy',accuracy=96)
@@ -56,6 +57,7 @@ class Battle:
   self.shuffle_turns=shuffle_turns
   self._showtime_rng=random.Random(None if seed is None else seed ^ 0x57071)
   self._showtime=None;self._showtime_spent=False
+  self.contract=None
   self._slot_actor=None;self._slot_effects={}
   self.personas=PERSONAS if persona_pool is None else persona_pool;self.persona=next(iter(self.personas));self.shifted=False
   p=self.personas[self.persona]
@@ -87,6 +89,12 @@ class Battle:
   self._say(f'Trial entered: {encounter} // {difficulty}.')
   self._spawn();self._advance()
   if self._support_used:self._queue_cutin(ORACLE_SUPPORT)
+ @property
+ def visible_enemies(self):
+  if not self.story:return self.enemies
+  from weekend_bosses import hidden_enemies
+  hidden=hidden_enemies(self)
+  return [u for u in self.enemies if u not in hidden]
  @property
  def story_intent(self):
   if not self.story:return ''
@@ -145,6 +153,17 @@ class Battle:
     if u.alive:
      u.hp=min(u.max_hp,u.hp+round(u.max_hp*.26));u.sp=min(u.max_sp,u.sp+8)
    self._say('Between waves: standing allies catch their breath and recover some HP/SP.')
+  recovery=self.config.get('between_wave_recovery')
+  if self.wave>1 and recovery:
+   fraction,sp=recovery
+   # Only encounters explicitly configured for a breather receive it.
+   # KOs are not revived; difficulty scales the rest, not battle stats.
+   scale={'Normal':1.,'Hard':.70,'Merciless':.45}[self.difficulty]
+   for u in self.allies:
+    if u.alive:
+     u.hp=min(u.max_hp,u.hp+round(u.max_hp*fraction*scale))
+     u.sp=min(u.max_sp,u.sp+round(sp*scale))
+   self._say('Between waves: standing fighters recover some HP and SP.')
   self.order=self._roll_order()
   if self.story and self.wave==1:
    opener=next(u for u in self.order if not u.enemy and u.alive)
@@ -153,7 +172,10 @@ class Battle:
   self._boss_state={};self._story_intent='';self._showtime=None
   for u in self.allies:
    u.ammo=u.max_ammo;u.down=False;u.guard=False
-  self._say(f'Wave {self.wave}/{self.wave_count}: '+', '.join(u.name for u in self.enemies)+'. Ammo refilled.')
+  if self.story:
+   from weekend_bosses import on_spawn
+   on_spawn(self)
+  self._say(f'Wave {self.wave}/{self.wave_count}: '+', '.join(u.name for u in self.visible_enemies)+'. Ammo refilled.')
  @property
  def allout_fighters(self):
   return sum(u.alive and not u.down for u in self.allies)
@@ -174,6 +196,9 @@ class Battle:
   if self.phase!='turn':return True
   if not self.allies[0].alive:
    self.phase='loss';self._say('Joker fell. Trial failed.');return True
+  if self.story:
+   from weekend_bosses import before_state
+   before_state(self)
   if not any(u.alive for u in self.enemies):
    self.interlude=self.config.get('wave_breaks',{}).get(self.wave)
    if self.interlude:
@@ -272,6 +297,10 @@ class Battle:
  def command_block(self,cat):
   if cat=='gun':return 'Out of ammo. Guns reload at the next wave.'
   if cat=='items':return 'No usable items remain in the squad’s bag.'
+  if cat=='baton' and self.story:
+   from weekend_bosses import action_block
+   reason=action_block(self,'baton')
+   if reason:return reason
   if cat=='baton':return 'No eligible ally to receive the Baton Pass.' if self.one_more else 'Earn One More before using Baton Pass.'
   if cat=='allout':
    if self.allies[0].down:return 'Joker is knocked down. He must be standing for an All-Out Attack.'
@@ -282,6 +311,10 @@ class Battle:
   """Explain an invalid standard action without changing combat state."""
   a=self.actor;s=self._spec(id)
   if s is None:return 'Unknown action.'
+  if self.story:
+   from weekend_bosses import action_block
+   reason=action_block(self,id,s)
+   if reason:return reason
   switching=id.startswith('skill:') and persona is not None and persona!=self.persona
   if switching and (a.name!='Joker' or self.shifted or persona not in self.personas):
    return 'Joker can switch Personas only once per action.'
@@ -311,6 +344,7 @@ class Battle:
     return f'{who} already has full {resource}.'
  def targets(self,id):
   if self.phase!='turn':return []
+  if id=='contract':return shadow_contract.targets(self)
   if id=='analyze':return [t for t in self.enemies if t.alive]
   s=self._spec(id)
   if not s:return []
@@ -323,6 +357,7 @@ class Battle:
  def actions(self,cat,persona=None):
   if self.phase!='turn' or self.actor is None or self.actor.enemy:return []
   a=self.actor
+  if cat=='contract':return shadow_contract.actions(self)
   if cat=='showtime' and self._showtime:
    return [('showtime','Showtime [T]',' × '.join(self._showtime)+' • Almighty • free, once per battle.')]
   if cat=='story-special' and self.story:
@@ -335,6 +370,9 @@ class Battle:
   if cat=='analyze':return [('analyze','Analyze','Review only affinities already observed. Does not spend your turn.')]
   if cat=='allout':return [('allout','All-Out Attack',f'{self.allout_fighters} standing • {self.allout_damage} damage to each Shadow.')] if self.hold_up else []
   if cat=='baton':
+   if self.story:
+    from weekend_bosses import action_block
+    if action_block(self,'baton'):return []
    return [(f'pass:{t.name}',f'Pass to {t.name}','Give your extra action to an ally and boost damage.') for t in self._baton()] if self.one_more else []
   if cat=='persona':
    return [(f'persona:{n}',n,p.get('role','Change Joker’s skills and affinities.')) for n,p in self.personas.items() if n!=self.persona] if a.name=='Joker' and not self.shifted else []
@@ -354,9 +392,12 @@ class Battle:
          if k in ('buff','debuff') else 'Restore SP' if k=='restore' else
          'Remove stat buffs' if k=='dekaja' else 'Remove stat debuffs' if k=='dekunda' else k.title())
   return ' • '.join([cost,label,tp]+([f'power {p}'] if p else []))
- def _queue_cutin(self,card):
-  if self.cut_in is None:self.cut_in=card
-  else:self.cut_in_queue.append(card)
+ def _queue_cutin(self,card,*,finishing=False,cast=(),targets=0):
+  if card==ORACLE_SUPPORT and not cast:
+   cast=tuple(u.name for u in self.allies if u.alive)
+  cue=CutCue(*card,finishing,tuple(cast),targets)
+  if self.cut_in is None:self.cut_in=cue
+  else:self.cut_in_queue.append(cue)
  def act(self,id,target=None,*,persona=None):
   self.damage_events.clear();self.cut_in=None;self.cut_in_queue.clear()
   supported=self._support_used
@@ -371,6 +412,11 @@ class Battle:
  def _act(self,id,target,persona=None):
   if self.phase!='turn' or not self.actor or self.actor.enemy:return 'No active party turn.'
   a=self.actor
+  if self.story:
+   from weekend_bosses import action_block
+   reason=action_block(self,id,self._spec(id))
+   if reason:return reason
+  if id=='contract':return shadow_contract.accept(self,target)
   if id=='story-special' and self.story:
    from weekend_bosses import use_special
    return use_special(self)
@@ -401,15 +447,16 @@ class Battle:
   if id=='allout':
    if not self.hold_up:return self.command_block('allout')
    damage=self.allout_damage
-   if self.story:
-    foes=[t for t in self.enemies if t.alive]
-    oracle_drop=('ufo' in self.config.get('oracle_features',()) and not self._ufo_cut_seen
-                 and len(foes)>=2 and all(t.hp<=damage for t in foes))
-    if oracle_drop:self._ufo_cut_seen=True
-    self._queue_cutin(all_out_cut(a.name,oracle_drop))
+   foes=[t for t in self.visible_enemies if t.alive]
+   cast=tuple(u.name for u in self.allies if u.alive and not u.down) if self.story else ()
    self._say(f'All-Out Attack! {self.allout_fighters} standing • {damage} damage per Shadow.')
-   for t in self.enemies:
-    if t.alive:self._hurt(t,damage)
+   for t in foes:self._hurt(t,damage)
+   if self.story:
+    finishing=not any(t.alive for t in foes)  # Before a burn tick or any later turn resolves.
+    oracle_drop=('ufo' in self.config.get('oracle_features',()) and not self._ufo_cut_seen
+                 and len(foes)>=2 and finishing)
+    if oracle_drop:self._ufo_cut_seen=True
+    self._queue_cutin(all_out_cut(a.name,oracle_drop),finishing=finishing,cast=cast,targets=len(foes))
    if self._state():
     if self.phase=='turn':self._advance()
    else:self._advance()

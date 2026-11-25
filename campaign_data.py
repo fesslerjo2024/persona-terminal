@@ -3,6 +3,7 @@ from importlib import import_module
 from importlib.util import find_spec
 from copy import deepcopy
 from battle_data import ENEMIES, PERSONAS
+from shadow_contract import CAMPAIGN_PERSONAS
 
 START_TEAM = ('Mona','Skull')
 START_PERSONAS = ('Arsène','Pixie',"Jack-o'-Lantern")
@@ -30,6 +31,7 @@ for module in ('early_data','pyramid_data','spaceport_data','casino_data','late_
     ENEMY_DATA.update(getattr(data, 'ENEMY_ADDITIONS', {}))
     FUSIONS += tuple(getattr(data, 'FUSION_ADDITIONS', ()))
 
+PERSONA_DATA.update(CAMPAIGN_PERSONAS)
 NODES = tuple(node for chapter in CHAPTERS for node in chapter['nodes'])
 
 # Local progression recipes, not a reproduction of Royal's level/Arcana table.

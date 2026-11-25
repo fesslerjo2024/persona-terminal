@@ -26,12 +26,12 @@ The Bank dials are playable in Story. Signature scripted mechanics include
 Kamoshida's Trophy and charge, Piggytron's charge and one-use bait, Kaneshiro's
 bodyguard and dwindling cash, Wakaba's aerial phase and ballista, and the
 Spaceport robot shifts and charged attacks. Sae’s Casino now has a playable
-Members Floor route and a first House of Darkness pass. Later route puzzles and scripted
-boss twists may be narrated or represented by conventional waves in this
-checkpoint, rather than implemented exactly. See the chapter module headers
-for research and adaptation notes. The January chapter is exposed after the
-December finale in this fight-only app; the original calendar and social
-stat prerequisites aren’t simulated.
+Members Floor route and House of Darkness. Later features include the
+Grail's supply line, Yaldabaoth’s targetable arms and Satanael finish, and
+the Laboratory’s role-based tendrils and coordinated Guard into Joker’s
+final strike. Remaining route puzzles may be compressed into story. See
+the chapter modules for research and adaptation notes. January opens after
+December in this fight-only app, without the original social prerequisites.
 
 ### Palace menus
 Controls stay the same on all nine maps: Left/Right changes Palace and
@@ -51,8 +51,12 @@ house, follow Oracle’s red and green control leads, and exchange the giant
 slot jackpot for a High Limit card. These casino coins are local to the
 attempt, never spendable Velvet Room credits. The House of Darkness has a
 short locked-door/vent detour and its own exit attendant. Combat carries
-current squad HP, SP, and items across these breaks. The Battle Arena, bridge,
-and heist still use the earlier compact adaptation.
+current squad HP, SP, and items across these breaks. Joker faces the Arena
+solo against three rounds of opponents with a modest between-round recovery,
+then the team uses Crow’s card
+loophole to bring down the bridge. In the heist, watch the
+first spin, expose the glass, and read the wheel’s announced changes. The boss
+sequence is a compact adaptation, not a recreation of Royal’s full wagers.
 
 References: [recorded Casino entry preview](https://www.bilibili.com/video/BV1214y1J7HP/),
 [recorded Royal palace run](https://www.youtube.com/watch?v=x5LDcdELNwo)
@@ -63,6 +67,26 @@ References: [recorded Casino entry preview](https://www.bilibili.com/video/BV121
 the longer control sequence was checked against the game scripts, not from
 successful playback of the full recording. Combat lineup sizes, tactics,
 and payout steps are compressed for terminal pacing.
+
+## Velvet Room and Shadow Contracts
+
+Use **V** on the map to inspect fusion, the Compendium, and your loadout.
+First fusion remains a straightforward registration. Re-fusing an already
+registered mask previews retained, added and removed skills before an
+explicit confirmation. Only a previous inheritance tracked as such can be
+replaced; Skill Card moves and older unclassified extras remain. A revision
+leaves the mask equipped if it was already equipped.
+
+Testing Mode offers **X** on the Fusion tab for a separate fresh practice
+stock; it doesn't affect the full Testing roster or your Story save. In Story,
+when an eligible Shadow is down during Hold Up, a Shadow Contract may offer
+a new Persona instead of an All-Out Attack. The Shadow withdraws, but the
+recruit only registers when that operation's first clear saves. There is no
+repeat contract farming or recruitment in Classic Trials.
+
+Combat displays your current and previewed mask’s defenses, and labels
+only discovered enemy reactions. Attempt exits and unsaved victories
+ask before discarding the current result.
 
 ## Verification
 
@@ -78,7 +102,8 @@ On the map, **T** opens Classic Trials. **Esc** goes back: from Classic
 Trials setup or its main battle menu it returns to the map, and an active
 Classic fight stays paused. **Esc** from the palace map returns to the title.
 Use Left/Right for categories, Up/Down to select, and Enter to preview.
-Press **P** to play all clips in order, **R** to replay, or **Esc** to back out.
+Press **P** to play all, **L** to loop the current scene, **R** to replay,
+or **Esc** to back out.
 Gallery previews do not read or alter battle progress.
 
 The eight Showtimes are full original ASCII scenes. **All-Out Attacks** has
@@ -95,7 +120,11 @@ frame, border, or font scaling is used during playback.
 
 The game uses the same scenes in eligible fights. Enter, Space or Esc skips
 the cut-in without replaying or cancelling damage. The animation pack does
-not change unlocks, battle rules, damage or save data.
+not change battle damage or save data. The cut-in takes its cast and direct
+knockout result from the actual combat event; a later burn tick does not
+award the All-Out finishing signature. In a Story or Testing fight,
+**?**, then **C**, puts completed repeat variants on Short playback for
+this session. Unseen clips and Gallery playback stay full length.
 
 Art references: [Royal Showtime gameplay](https://www.youtube.com/watch?v=NzZLv8X2sJA),
 [Queen & Noir gameplay](https://www.youtube.com/watch?v=Dv9JIJk7t7E),

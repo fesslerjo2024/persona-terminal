@@ -5,6 +5,10 @@ SLOT_COST = 5_000
 JACKPOT = 50_000
 CARD_COST = 50_000
 REGISTRATION_COINS = 1_000
+ARENA_PRIZE = 100_000
+RAISED_TOLL = 1_000_000
+CROW_PAYOUT = 450_000
+CROW_SPARE_BALANCE = 451_000
 # Royal's repeated dice wins and the crew's extra winnings are one action.
 DICE_WINNINGS = 5_000
 
@@ -27,6 +31,7 @@ class CasinoRoute:
     registered: bool = False
     door_checked: bool = False
     through_vent: bool = False
+    bridge_deposit: int = 0
     stage: str = ''
     notice: str = ''
     pick: int = 0
@@ -37,6 +42,10 @@ class CasinoRoute:
         self.pick = 0
         self.notice = ''
         self.leaving = False
+
+    @property
+    def bridge_toll(self):
+        return RAISED_TOLL if self.bridge_deposit else ARENA_PRIZE
 
     def rows(self):
         o = RouteAction
@@ -72,6 +81,20 @@ class CasinoRoute:
                   'The squad is already through.' if self.through_vent else ''),
                 o('exit', 'Follow the lit passage',
                   'Reach the far side of the wall first.' if not self.through_vent else ''),
+            )
+        if self.stage == 'bridge':
+            deposit = self.bridge_deposit
+            return (
+                o('prize', 'Present the arena prize',
+                  'The arena prize is already counted.' if deposit else ''),
+                o('payout', 'Re-scan the team card',
+                  'Present the arena prize first.' if not deposit else
+                  'Crow’s payout is already counted.' if deposit > ARENA_PRIZE else ''),
+                o('spare', 'Scan Crow’s spare card',
+                  'Re-scan the team card first.' if deposit <= ARENA_PRIZE else
+                  'The spare card is already counted.' if deposit >= RAISED_TOLL else ''),
+                o('cross', 'Lower the bridge and cross',
+                  'The deposit is still short.' if deposit < RAISED_TOLL else ''),
             )
         raise ValueError(f'Unknown Casino route: {self.stage}')
 
@@ -109,6 +132,15 @@ class CasinoRoute:
         elif id == 'vent':
             self.through_vent = True
             self.notice = 'The squad drops onto the far ledge. A light marks the way out.'
-        else:  # Leave the Dice Game or the House of Darkness.
+        elif id == 'prize':
+            self.bridge_deposit = ARENA_PRIZE
+            self.notice = 'Sae raises the toll. Crow asks you to check the team card again.'
+        elif id == 'payout':
+            self.bridge_deposit += CROW_PAYOUT
+            self.notice = 'Crow’s arena payout posted. He hands you a spare card for the rest.'
+        elif id == 'spare':
+            self.bridge_deposit += CROW_SPARE_BALANCE
+            self.notice = 'The machine accepts both deposits.'
+        else:  # Leave Dice, Darkness, or the Bridge of Judgment.
             return True
         return False
