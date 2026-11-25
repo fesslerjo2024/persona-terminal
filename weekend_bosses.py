@@ -78,10 +78,17 @@ def intercept(b,target,skill):
         return bodyguard
     return target
 
+def target_block(b,target,skill):
+    if (target.behavior=='pyramid-wakaba' and not b._boss_state.get('grounded')
+            and skill['kind']=='damage' and skill.get('element')=='Physical'):
+        return 'Wakaba is airborne. Use magic or Gun.'
+    return None
+
 def block_hit(b,target,skill):
     if any(hook(b,target,skill) for hook in _hooks('block_hit')):return True
-    if target.behavior=='pyramid-wakaba' and not b._boss_state.get('grounded') and skill.get('element')=='Physical':
-        b._say('Wakaba is airborne. Use abilities or Gun instead of melee.')
+    reason=target_block(b,target,skill)
+    if reason:
+        b._say(reason)
         return True
     if target.behavior=='bank-kaneshiro' and _cover(b,target):
         b._say('The bodyguard shields Kaneshiro from the group attack.')
@@ -102,7 +109,7 @@ def intent(b):
     if _active(b,'pyramid-wakaba'):
         if 'pending' in st:return 'SPHINX DIVE incoming. Guard before impact.'
         if special(b):return 'BALLISTA READY  /  Press 9 to ground Wakaba.'
-        return 'WAKABA GROUNDED  /  Take the opening.' if st.get('grounded') else 'WAKABA AIRBORNE  /  Use skills or Gun.'
+        return 'WAKABA GROUNDED  /  Take the opening.' if st.get('grounded') else 'WAKABA AIRBORNE  /  Magic or Gun. Melee won’t reach.'
     if _active(b,'space-worker'):
         return 'SHIFT CLOCK  /  '+('Reissue spent. Finish this squad.' if st.get('reissued') else f"Clear by end of round {st.get('due',_shift_deadline(b))-1}.")
     if _active(b,'space-exec'):

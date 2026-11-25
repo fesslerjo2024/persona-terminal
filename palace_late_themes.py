@@ -1,325 +1,182 @@
-"""Read-only route maps for Mementos Depths and the Laboratory."""
-from battle_ui import CYAN, DIM, GREEN, RED, WHITE
-from reel_palette import IDS
+"""Terminal-platform and clinical-form maps, with gated late-route variants."""
 
-_NAVY = IDS['navy']
-_SLATE = IDS['slate']
-_TEAL = IDS['teal']
-_WINE = IDS['wine']
-_ROSE = IDS['rose']
+from palace_design import draw_design
 
-# Each schematic is original Unicode art. It changes when an accessible stop
-# becomes selected, but a locked stop cannot preview a later route or room.
-_DEPTHS = (
-    (
-        '╔═╦═══════════╦═╗',
-        '║ ║  ╔━━━━━╗  ║ ║',
-        '╠═◎━━◎━━━━━◎━━◎═╣',
-        '║ ║  ╚╗   ╔╝  ║ ║',
-        '║ ╚╗  ╚═╦═╝  ╔╝ ║',
-        '║  ╚═◎══◎══◎═╝  ║',
-        '║       ║       ║',
-        '╚═══════╬═══════╝',
-        '        ║        ',
-        '        ╵        ',
-    ),
-    (
-        '     ║     ║     ',
-        '     ╚═◎═══╝     ',
-        '   ┏━━━━┻━━━━┓   ',
-        '   ┃ ║ ║ ║ ║ ┃   ',
-        ' ╔═╩═╩═╩═╩═╩═╩═╗ ',
-        ' ║ ╔════╦════╗ ║ ',
-        ' ╚═╣    ║    ╠═╝ ',
-        '   ║ ┌──╨──┐ ║   ',
-        '   ║ │  │  │ ║   ',
-        '   ╨ └──┴──┘ ╨   ',
-    ),
-    (
-        '╔═══════╦═══════╗',
-        '║   01  ║  02   ║',
-        '║ ║║║║│ ║ │║║║║ ║',
-        '╠═══════╬═══════╣',
-        '║   03  ║  04   ║',
-        '║ ║║║║│ ║ │║║║║ ║',
-        '╠═══════╬═══════╣',
-        '║   05  ║  06   ║',
-        '║ ║║║║│ ║ │║║║║ ║',
-        '╚═══════╩═══════╝',
-    ),
-    (
-        ' ╔═════════════╗ ',
-        ' ║ ║ ║ ║ ║ ║ ║ ║ ',
-        ' ╠═════════════╣ ',
-        ' ║ │  │   │  │ ║ ',
-        ' ╚═╤══╡   ╞══╤═╝ ',
-        '   │  ╵   ╵  │   ',
-        '   │   ╷ ╷   │   ',
-        '   └───┼─┼───┘   ',
-        '       ║ ║       ',
-        '       ║ ║       ',
-    ),
-    (
-        '          ╔╗     ',
-        '      ╔╗  ║╠═╗   ',
-        '      ║╠══╝║▓║   ',
-        '   ╔╗ ║║▓╔═╣▓║   ',
-        '   ║╠═╝╚═╝ ╚═╝   ',
-        '   ║║▓   ╔╗      ',
-        ' ╔═╝╚════╝║      ',
-        ' ║▓▓    ▒▒║      ',
-        ' ╚════════╝      ',
-        '        ░        ',
-    ),
-)
-
-_DEPTH_LAST = 5
-
-_LAB = (
-    (
-        '┌───────────────┐',
-        '│ ╭─╮ ┌─┬─┬─┐   │',
-        '│ │+│ ├─┼─┼─┤   │',
-        '│ ╰─╯ └─┴─┴─┘   │',
-        '├────┬──────────┤',
-        '│    │  ╭─────╮ │',
-        '│ ○  └──┤ ·ᴗ· │ │',
-        '│       ╰─────╯ │',
-        '│ ───────────── │',
-        '└───────────────┘',
-    ),
-    (
-        '┌───────────────┐',
-        '│ ┌───────────┐ │',
-        '│ │░░░███░░░░░│ │',
-        '│ │███░░░███░░│ │',
-        '│ └─────┬─────┘ │',
-        '│       │       │',
-        '├──┬────┴────┬──┤',
-        '│  ╵    │    ╵  │',
-        '│       ╵       │',
-        '└───────────────┘',
-    ),
-    (
-        '┌───────────────┐',
-        '│ ╭┐ ╭┐ ╭┐ ╭┐   │',
-        '│ ││ ││ ││ ││   │',
-        '│ ╰┘ ╰┘ ╰┘ ╰┘   │',
-        '├───────────────┤',
-        '│ ◆──────────   │',
-        '│ ────██████─   │',
-        '│ ───────────   │',
-        '│ ─██████████   │',
-        '└───────────────┘',
-    ),
-    (
-        '┌───────────────┐',
-        '│       ○       │',
-        '│      ╱│╲      │',
-        '│  ○──●─●─●──○  │',
-        '│       │       │',
-        '├───────┴───────┤',
-        '│   □  □  □     │',
-        '│   ■  ■  ■     │',
-        '│   □  □  □     │',
-        '└───────────────┘',
-    ),
-    (
-        '┌───────────────┐',
-        '│        ╱━━━━╮ │',
-        '│  ╭━━━━┿━╮   ┃ │',
-        '│  ┃   ╱  ┃   ┃ │',
-        '│  ┃  ╱   ┃   ╵ │',
-        '│  ╰━┿━━━━┿━━╮  │',
-        '│   ╱     ┃  ┃  │',
-        '│  ╵      ╵  ┃  │',
-        '│            ╵  │',
-        '└───────────────┘',
-    ),
-    (
-        '┌───────────────┐',
-        '│     ╲   ╱     │',
-        '│   ╲  ╭─╮  ╱   │',
-        '│  ────┤●├────  │',
-        '│   ╱  ╰─╯  ╲   │',
-        '│     ╱   ╲     │',
-        '├───────────────┤',
-        '│  ○         ■  │',
-        '│  │         │  │',
-        '└──╨─────────╨──┘',
-    ),
-)
+_DEPTH_CROSSING = 'depths-rebellion'
+_LAB_LIGHTS = 'laboratory-colors'
 
 
-def _paint(app, y, x, width, line, color, bold=False, reverse=False):
-    if width > 0 and 6 <= y <= app.h - 8 and 0 <= x < app.w - 1:
-        app.put(y, x, line[:min(width, app.w - 1 - x)], color, bold, reverse)
+def _focus_reaches(p, gate):
+    """Use the story's existing availability and the actual focused route."""
+    return p.available(p.selected) and any(
+        row.id==gate and p.available(i) for i,row in enumerate(p.rows[:p.selected+1])
+    )
 
 
-def _stage(view):
-    """Track the selection without revealing artwork for an inaccessible stop."""
-    selected = min(max(0, view.selected), len(view.rows) - 1)
-    return max((i for i in range(selected + 1)
-                if view.rows[i].status != 'locked'), default=0)
+def _lanes(p,x,y,last,width):
+    step=(last-y)/max(1,p.count-1)
+    for i in range(p.count):
+        p.mission(i,x,y+step*i,width=width)
 
 
-def _geometry(app, rows, depth=False):
-    # Keep the largest route label, marker and earned grade entirely readable.
-    label = max((len(r.title) for r in rows), default=29) + 10
-    # Reserve space for a medal even before one is earned, so the art
-    # does not shift sideways on the next visit.
-    art_x = max(40, label + (5 if depth else 6))
-    if not depth:
-        art_x = max(art_x, app.w // 2)
-    art = app.w - 3 - art_x
-    span = app.h - 15
-    step = min(5 if depth else 4, max(1, span // max(1, len(rows) - 1)))
-    return art_x, art, step
+def _platform(p):
+    """DP-04: clean departure board, double route rail, and route-only status."""
+    a=p.art
+    tight=p.height<15
+    top=8 if tight else 13
+    bottom=54
+    step=(bottom-top)/max(1,p.count-1)
+    a.shape('indigo',(1,1),(99,1),(99,3.5),(1,3.5),edge='slate',grain=3)
+    a.line('navy',(1,58),(96,58),(99,56))
+    a.line('slate',(6,top-3),(6,bottom+2))
+    a.line('teal',(10,top-3),(10,bottom+2))
+    for i in range(p.count):
+        y=top+step*i
+        if tight and i<p.count-1:
+            a.line('ink',(15,y+3.4),(85,y+3.4))
+        if not tight:
+            a.line('slate',(15,y+3.5),(79,y+3.5))
+        ink='cyan' if p.available(i) else 'slate'
+        # Selection on a hidden row never lights up the associated route.
+        a.oval(8,y,1.2,1.25,'white' if i==p.selected and p.available(i) else 'ink',edge=ink)
+    _lanes(p,14,top,bottom,78)
+    # End of the platform, separated from the text and route indication.
+    for j in range(4):
+        x=87+j*3
+        a.line('wine' if j==0 else 'navy',(x,top+3),(x,bottom-3))
 
 
-def _widen(pattern, width):
-    """Stretch flat rails and voids, never posts, numbered cells or junctions."""
-    original = len(pattern[0])
-    if width <= original:
-        return pattern
-    flat = ' ═━─░▒▓'
-    lanes = [i for i in range(1, original - 1)
-             if all(row[i] in flat for row in pattern)]
-    if not lanes:
-        return tuple(row.center(width) for row in pattern)
-    rails = [i for i in lanes if any(row[i] != ' ' for row in pattern)] or lanes
-    count, remaining = divmod(width - original, len(rails))
-    repeats = {col: count + (j < remaining) for j, col in enumerate(rails)}
-    return tuple(''.join(c * (1 + repeats.get(i, 0)) for i, c in enumerate(row))
-                 for row in pattern)
+def _fracture(p,left,top,right,bottom):
+    a=p.art
+    def pt(x,y):
+        return left+(right-left)*x/100,top+(bottom-top)*y/60
+    def plane(ink,*points,edge=None,grain=8):
+        a.shape(ink,*(pt(*a) for a in points),edge=edge,grain=grain)
+    def beam(ink,*points):
+        a.line(ink,*(pt(*a) for a in points))
+
+    plane('plum',(0,0),(25,0),(35,16),(36,24),(39,28),(26,44),(18,49),(10,59),(0,59),
+          edge='wine',grain=3)
+    plane('indigo',(72,0),(100,0),(100,59),(73,59),(65,50),(60,33),(67,29),(62,15),
+          edge='wine',grain=3)
+    plane('slate',(2,15),(34,15),(42,22),(37,23),(40,28),(1,28),edge='rose',grain=3)
+    plane('slate',(67,26),(98,26),(98,41),(66,41),(63,37),(68,32),(62,30),edge='red',grain=4)
+    beam('white',(6,19),(37,19),(43,27))
+    beam('red',(64,31),(93,31))
+    # Falling debris recedes into the chasm. The lighter dotted approach
+    # to operation 04 should read first, not this diagonal toward 06.
+    beam('plum',(45,31),(50,37),(53,42))
+    beam('indigo',(53,42),(55,45),(57,51))
+    a.point(*pt(47,32),'plum')
+    a.point(*pt(54,41),'indigo')
+    a.point(*pt(58,48),'indigo')
 
 
-def _depth_pattern(stage, w, h):
-    if stage == _DEPTH_LAST:
-        # Draw the broken terminus on the full width; the falling right-hand
-        # sequence must keep its diagonal, not move off with repeated cells.
-        middle = max(5, (w - 11) // 2)
-        further = max(3, w - middle - 9)
-        end = middle + further + 7
-        return (
-            '╔══╦' + '═' * middle + '╦' + '═' * further + '╗',
-            '╚══◎' + '━' * middle + '◎' + '━' * further + '╩╲',
-            ' ' * end + '╲',
-            ' ' * (end + 1) + '·',
-        )
-    pattern = _widen(_DEPTHS[stage], w)
-    if h <= len(pattern):
-        return pattern
-    # Only vertical portions are repeated. Horizontal paths and cell numbers
-    # occur once even with half a screen of extra height.
-    stretch = (
-        (1, 6, 8),
-        (0, 3, 8),
-        (2, 5, 8),
-        (1, 3, 8),
-        (2, 5, 7),
-    )[stage]
-    count, remainder = divmod(h - len(pattern), len(stretch))
-    lines = []
-    for i, row in enumerate(pattern):
-        lines.append(row)
-        if i in stretch:
-            vertical = ''.join(c if c in '║┃│╎┆┋▓▒░' else
-                               '║' if c in '╔╗╚╝╬╦╠╣╩' else ' '
-                               for c in row)
-            lines.extend([vertical] * (count + (stretch.index(i) < remainder)))
-    return lines
-
-
-def _depth_art(app, x, width, stage):
-    height = app.h - 14
-    pattern = _depth_pattern(stage, width, height)
-    base = _SLATE if stage >= 2 else _TEAL
-    accent = RED if stage >= 3 else _WINE if stage == 2 else _TEAL
-    for j, line in enumerate(pattern):
-        is_rail = any(c in line for c in '◎╬╩0123456')
-        _paint(app, 6 + j, x, width, line, accent if is_rail else base, is_rail)
-
-
-def _lab_art(app, x, width, stage):
-    pattern = _widen(_LAB[stage], min(width, 31))
-    start = x + (width - len(pattern[0])) // 2
-    top = 6 + max(0, (app.h - 13 - len(pattern)) // 2)
-    for i, line in enumerate(pattern):
-        # A white luminous instrument face gives way to darker evidence
-        # rather than changing the underlying wording or choices.
-        light = stage < 2 or i < 5
-        color = WHITE if light else _ROSE if stage >= 3 else CYAN
-        _paint(app, top + i, start, width, line, color, light, light)
-
-
-def _label(row, index):
-    mark = {'locked': '▣', 'clear': '✓', 'open': '◆'}[row.status]
-    point = '▶' if row.selected else ' '
-    suffix = f' [{row.medal}]' if row.medal else ''
-    return f'{point}{index + 1:02} {mark} {row.title}{suffix}'
-
-
-def _depth_rows(app, view, width, step, stage):
-    accent = RED if stage == _DEPTH_LAST else _WINE if stage >= 2 else _TEAL
-    for i, row in enumerate(view.rows):
-        color = (DIM if row.status == 'locked' else accent if row.selected else
-                 GREEN if row.status == 'clear' else WHITE)
-        last = i == len(view.rows) - 1
-        pos = 6 + i * step
-        rail = '║' if i <= stage else '╎'
-        station = ' ' if last and stage == i else '╵' if last else '◎' if i <= stage else '○'
-        _paint(app, pos, 3, 1, station, accent if i <= stage else DIM, row.selected)
-        _paint(app, pos, 4, width - 1, _label(row, i), color, row.selected, row.selected)
-        if not last:
-            for gap in range(1, step):
-                _paint(app, pos + gap, 3, 1, rail, accent if i < stage else DIM)
-
-
-def _lab_cards(app, view, width, step, stage):
-    for i, row in enumerate(view.rows):
-        pos = 6 + i * step
-        locked = row.status == 'locked'
-        # Keep gated cards unaltered. Looking at an inaccessible operation
-        # cannot expose evidence or change a past card's appearance.
-        compromised = stage >= 2 and i <= stage and not locked
-        severity = min(stage - 1, 4) if compromised else 0
-        frame = _ROSE if severity >= 3 else _TEAL if compromised else _NAVY
-        color = DIM if locked else WHITE if row.selected else GREEN if row.status == 'clear' and not compromised else WHITE
-        label = _label(row, i)
-        card = label.ljust(width - 2)
-        edge = '╎' if locked else '╱' if severity >= 3 else '┤' if compromised else '│'
-        other = '╎' if locked else '╲' if severity >= 3 else '┐' if compromised else '│'
-        _paint(app, pos, 3, 1, edge, frame, row.selected)
-        _paint(app, pos, 4, width - 2, card, color, row.selected, row.selected or not locked and not compromised)
-        _paint(app, pos, 3 + width - 1, 1, other, frame, row.selected)
-        if step > 1:
-            seam = '┄' if locked else '╌' if compromised else '─'
-            length = width - 2
-            if severity >= 2:
-                first, end = length // 5 + (i * 2) % (length // 3), length * 4 // 5
-                seam = seam * first + '▒' * (severity + 1) + seam * (end - first - severity - 1) + ' ' * (length - end)
-            else:
-                seam *= length
-            _paint(app, pos + 1, 4, length, seam, frame)
-
-
-def draw_depths(app, view):
-    if not view.rows:
+def _bridge(p):
+    """DP-05: the surviving routes occupy opposite edges of a broken span."""
+    if p.width<81 or p.height<17:
+        _fracture(p,72,5,99,57)
+        # Labels stack at minimum width; keep the 03 → 04 cue near the
+        # labels rather than floating it out across the side illustration.
+        for x,y in ((3,26),(2,29),(2,32),(3,34)):
+            p.art.point(x,y,'slate')
+        p.art.point(3.4,34.6,'violet')
+        _lanes(p,4,7,53,65)
         return
-    stage = min(_stage(view), _DEPTH_LAST)
-    x, width, step = _geometry(app, view.rows, True)
-    _depth_rows(app, view, x - 4, step, stage)
-    _depth_art(app, x, width, stage)
+    _fracture(p,2,2,98,58)
+    # A sparse approach marker bends across the gap between the third
+    # operation and the first operation on the far ledge. No solid bridge.
+    for x,y in ((45,49),(47,45),(48.5,41),(49.5,37),(49.8,32),(50,28),
+                (50.4,23),(51,19),(51.7,15),(53,11)):
+        p.art.point(x,y,'slate')
+    p.art.point(53.3,10,'violet')
+    y_left=(6,35,50)
+    y_right=(8,23,51)
+    for i in range(p.count):
+        left=i<3
+        p.mission(i,4 if left else 54,(y_left if left else y_right)[i%3],
+                  width=43 if left else 45)
 
 
-def draw_laboratory(app, view):
-    if not view.rows:
+def _intake(p):
+    """LB-01: a sparse paper form and embossed clinical seal."""
+    a=p.art
+    tight=p.width<80 or p.height<15
+    left,top,right,bottom=3,2,73 if tight else 69,58
+    a.shape('indigo',(left,top),(right-3,top),(right,top+3),(right,bottom),
+            (left,bottom),(left,top),edge='white',grain=0)
+    a.shape('indigo',(left+1,top+1),(right-4,top+1),(right-1,top+5),(right-1,top+6),
+            (left+1,top+6),edge='slate',grain=0)
+    start,last=(11,51) if tight else (13,51)
+    step=(last-start)/max(1,p.count-1)
+    for i in range(p.count-1):
+        y=start+step*i+(step-1)*.56
+        a.line('navy',(left+3,y),(right-4,y))
+    _lanes(p,left+3,start,last,right-left-4)
+    mid=(right+99)/2
+    a.oval(mid,26,8,11,'indigo',edge='slate',grain=4)
+    a.ring(mid,26,7,9,'teal')
+    a.line('white',(mid,20),(mid,32))
+    a.line('white',(mid-4,26),(mid+4,26))
+    for i,ink in enumerate(('cyan','teal','slate')):
+        a.line(ink,(right+4,41+3*i),(96-i,41+3*i))
+
+
+def _prism(p,left,top,right,bottom):
+    a=p.art
+    def pt(x,y):
+        return left+(right-left)*x/100,top+(bottom-top)*y/60
+    def beam(ink,*points):
+        a.line(ink,*(pt(*a) for a in points))
+    beam('white',(3,29),(30,29),(49,27))
+    # This is a map-focus cue, not the current switch state inside the
+    # route. Only the accessible Twilight Corridor focus lights the span.
+    bridge_focused=p.rows[p.selected].id==_LAB_LIGHTS and p.available(p.selected)
+    for end,ink in ((14,'cyan'),(27,'green'),(45,'rose')):
+        beam(ink,(49,27),(63,(27+end)/2),(96,end))
+    if bridge_focused:
+        beam('teal',(48,27),(63,22),(96,15))
+        beam('cyan',(48,25),(63,19),(96,12))
+        beam('white',(60,22),(73,19),(87,16),(96,14))
+    a.shape('navy',pt(41,38),pt(49,14),pt(60,38),edge='white',grain=3)
+    beam('slate',(46,34),(49,23),(54,34))
+    beam('teal',(2,24),(12,24),(12,34),(2,34))
+    for end,ink in ((14,'cyan'),(27,'green'),(45,'rose')):
+        x,y=pt(96,end)
+        active=bridge_focused and ink=='cyan'
+        a.oval(x,y,2.1 if active else 1.2,2 if active else 1.4,
+               'cyan' if active else 'ink',edge='white' if active else ink)
+
+
+def _color_route(p):
+    """LB-03: a single prism shows the three distinct light paths."""
+    if p.width<81 or p.height<17:
+        _prism(p,70,8,98,55)
+        _lanes(p,4,7,53,65)
         return
-    stage = min(_stage(view), len(_LAB) - 1)
-    x, width, step = _geometry(app, view.rows)
-    _lab_cards(app, view, x - 4, step, stage)
-    _lab_art(app, x, width, stage)
+    _prism(p,2,16,98,45)
+    for i in range(p.count):
+        x=4 if i<3 else 55
+        # Offset the two banks around the light diagram while keeping full
+        # phrases at ordinary desktop widths.
+        y=(5,13,54)[i%3] if i<3 else (6,46,54)[i%3]
+        p.mission(i,x,y,width=43 if i<3 else 44)
 
 
-THEMES = {'depths': draw_depths, 'laboratory': draw_laboratory}
+def _depth_layout(p):
+    (_bridge if _focus_reaches(p,_DEPTH_CROSSING) else _platform)(p)
+
+
+def _lab_layout(p):
+    (_color_route if _focus_reaches(p,_LAB_LIGHTS) else _intake)(p)
+
+
+def draw_depths(app,view):
+    draw_design(app,view,'violet',_depth_layout)
+
+
+def draw_laboratory(app,view):
+    draw_design(app,view,'cyan',_lab_layout)
+
+
+THEMES={'depths':draw_depths,'laboratory':draw_laboratory}

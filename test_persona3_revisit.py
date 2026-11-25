@@ -7,7 +7,8 @@ from unittest import TestCase
 
 from battle_ui import ESC
 from persona3_app import P3App
-from persona3_state import END, MOON, P3Store
+from persona3_state import MOON, P3Store
+from persona3_yabbashah import AFTER_AUGUST
 
 
 class ThebelRevisitTests(TestCase):
@@ -30,13 +31,13 @@ class ThebelRevisitTests(TestCase):
         before=self.path.read_bytes()
         app=self.depart()
         self.assertEqual([label for _,label in app.entrance_targets()],
-                         ['22F / Sealed Border','02F / Revisit','05F / Revisit','08F / Revisit',
-                          '11F / Revisit','17F / Revisit'])
+                         ['02F / Revisit','05F / Revisit','08F / Revisit','11F / Revisit',
+                          '17F / Revisit','22F / Sealed Border'])
         app.key('\n')
         self.assertEqual(app.page,'border')
         app.key('\n')
         self.assertEqual(app.page,'entrance')
-        app.key('3')
+        app.key('2')
         hall=app.hall
         self.assertEqual(hall.floor.number,5)
         self.assertEqual(hall.encounter,'thebel-patrol')
@@ -49,7 +50,7 @@ class ThebelRevisitTests(TestCase):
 
     def test_same_night_resume_keeps_exact_position_patrol_and_resources(self):
         app=self.depart()
-        app.key('6')
+        app.key('5')
         self.assertEqual(app.hall.encounter,'thebel-ascent')
         app.hall.step('up')
         hall=app.hall
@@ -71,22 +72,24 @@ class ThebelRevisitTests(TestCase):
         self.assertEqual(app.record.day,today+timedelta(days=1))
         self.assertEqual(app.record.depth,5)
         self.depart()
-        app.key('6')
+        app.key('5')
         self.assertIsNot(app.hall,hall)
         self.assertFalse(app.hall.defeated)
 
     def test_replay_victory_has_no_first_clear_bonus_but_can_award_replay_coins(self):
-        app=self.depart();app.key('3')
+        app=self.depart();app.key('2')
         before=self.path.read_bytes()
         app.sp_bonus=False
         app.battle=SimpleNamespace(resources=app.resources,inventory=app.inventory)
         app._finish_hall_battle()
         self.assertEqual(app.page,'shuffle')
-        self.assertEqual(self.path.read_bytes(),before)
+        self.assertEqual((app.record.xp,app.record.yen),(25,200))
+        self.assertNotEqual(self.path.read_bytes(),before)
+        earned=self.path.read_bytes()
         self.assertEqual(app.shuffle_yen(),30)
         app.key('1')  # Already owns Angel.
         self.assertEqual(app.page,'shuffle')
-        self.assertEqual(self.path.read_bytes(),before)
+        self.assertEqual(self.path.read_bytes(),earned)
         app.key('2')
         self.assertEqual(app.record.yen,230)
         self.assertEqual(app.record.depth,5)
@@ -95,7 +98,7 @@ class ThebelRevisitTests(TestCase):
     def test_only_accessed_floors_plus_one_frontier_are_available(self):
         self.store.commit(depth=1)
         app=self.depart()
-        self.assertEqual([entry[0] for entry in app.entrance_targets()],[1,0])
+        self.assertEqual([entry[0] for entry in app.entrance_targets()],[0,1])
         app.key('5')
         self.assertEqual(app.page,'entrance')
         app.key('\n')
@@ -107,13 +110,19 @@ class ThebelRevisitTests(TestCase):
         self.assertEqual(app.shuffle_yen(),90)
 
     def test_poststory_and_preboard_practice_leave_exact_save_and_unlock_only_temporarily(self):
-        for phase,day,back in (('complete',END,'story'),('monorail',MOON,'operation')):
+        for phase,day,back in (('complete',AFTER_AUGUST,'story'),('monorail',MOON,'operation')):
             with self.subTest(phase=phase):
                 self.store.commit(phase=phase,day=day,activity='',depth=1)
                 app=P3App(None,self.store,seed=5)
                 before=self.path.read_bytes()
-                app.key('t');app.key('\n')
+                app.key('t')
+                if phase=='complete':app.key('s') # Squad selection before deployment.
+                app.key('\n')
                 self.assertTrue(app.free_expedition)
+                if app.arqa_open:
+                    import curses
+                    app.key(curses.KEY_RIGHT)
+                    app.key('\n') # Validates the travel scene must consume its skip.
                 app.key('\n')
                 self.assertEqual(app.hall.floor.number,5)
                 app.resources['Protagonist']=(25,18)
@@ -127,13 +136,13 @@ class ThebelRevisitTests(TestCase):
                 self.assertEqual(self.path.read_bytes(),before)
 
     def test_compact_entrance_can_show_top_and_resume_in_one_screen(self):
-        app=self.depart();app.key('6');app.key('t')
+        app=self.depart();app.key('5');app.key('t')
         app.w,app.h=65,25
         paint=[]
         app.put=lambda y,x,text,*_:paint.append((y,x,str(text)))
         app.draw()
         body=' '.join(t for _,_,t in paint)
         self.assertIn('22F / Sealed Border',body)
-        self.assertIn('17F / Revisit',body)
+        self.assertIn('17F Swift Axle Gate',body)
         self.assertIn('Resume 17F',body)
         self.assertTrue(all(0<=y<24 and 0<=x<=x+len(t)<65 for y,x,t in paint))

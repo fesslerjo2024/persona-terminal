@@ -24,7 +24,7 @@ class CutinPacingTests(TestCase):
                                   encounter_config={'waves':[['Bicorn']],'party_size':3})
         self.app._b_screen='command'
         self.title=cutins.ALL_OUT['Joker'][0]
-        self.cue=cutins.CutCue(*cutins.ALL_OUT['Joker'],True,('Joker','Mona'),1)
+        self.cue=cutins.CutCue(*cutins.ALL_OUT['Joker'],False,('Joker','Mona'),1)
         self.seconds=cutins.duration(self.title)
 
     def option(self,state):
@@ -51,7 +51,7 @@ class CutinPacingTests(TestCase):
         self.assertAlmostEqual(self.start(5),self.seconds/SHORT_REPEAT_RATE)
         with patch('battle_ui.time.monotonic',return_value=5.5),patch.object(app,'draw_cutin') as draw:
             app.battle_page()
-        draw.assert_called_once_with(self.title,.5*SHORT_REPEAT_RATE,finishing=True,
+        draw.assert_called_once_with(self.title,.5*SHORT_REPEAT_RATE,finishing=False,
                                      cast=('Joker','Mona'),targets=1)
         app._b_release_cut(5.51)
         self.option('SHORT')
@@ -65,10 +65,13 @@ class CutinPacingTests(TestCase):
         self.assertAlmostEqual(self.start(4),self.seconds)
         app._b_release_cut(4.25)
         self.option('FULL')
-        # A terminating nonlethal clip is a different first view than the
-        # earlier lethal one, and a practice view cannot collapse the story.
-        self.assertAlmostEqual(self.start(8,cutins.CutCue(*cutins.ALL_OUT['Joker'])),self.seconds)
-        app._b_release_cut(8.25)
+        # Full finishers are never shortened, even if already viewed. An
+        # ordinary practice view cannot collapse a first story view either.
+        finishing=cutins.CutCue(*cutins.ALL_OUT['Joker'],True)
+        self.assertAlmostEqual(self.start(8,finishing),self.seconds)
+        app._b_release_cut(8+self.seconds+.01)
+        self.assertAlmostEqual(self.start(9,finishing),self.seconds)
+        app._b_release_cut(9.25)
         app.testing=True
         self.assertAlmostEqual(self.start(9),self.seconds)
         app._b_release_cut(9.25)
@@ -80,6 +83,39 @@ class CutinPacingTests(TestCase):
         self.assertEqual(gallery.clip.title,self.title)
         self.assertAlmostEqual(gallery.clip.duration,self.seconds)
         self.assertFalse(self.path.exists())
+
+    def test_duplicate_nonfinishing_clip_surfaces_short_setting_without_using_turn(self):
+        app=self.app
+        self.start(0)
+        app._b_release_cut(self.seconds+.01)
+        app._b_arena()
+        self.assertFalse(any('C SHORT REPEATS' in msg for msg in app.out))
+        app.out.clear()
+        self.start(10)
+        app._b_release_cut(10+self.seconds+.01)
+        app._b_arena()
+        self.assertTrue(any('C SHORT REPEATS' in msg for msg in app.out))
+        b=app._b_battle
+        before=(b.log[:],b.actor,b.round,dict(b.items))
+        app.key('c')
+        self.assertTrue(app._b_short_repeats)
+        self.assertEqual((b.log,b.actor,b.round,b.items),before)
+        self.assertAlmostEqual(self.start(20),self.seconds/SHORT_REPEAT_RATE)
+
+    def test_seen_wave_ending_is_short_but_true_final_blow_is_full(self):
+        app=self.app
+        cue=cutins.CutCue(*cutins.ALL_OUT['Joker'],True,('Joker','Mona'),1)
+        b=app._b_battle
+        def wave_cue(now,phase):
+            b.cut_in=cue;b.wave+=1;b.phase=phase
+            app._b_present_action(b,b.wave-1,b.enemies,now)
+            return app._b_cut_in[3]-now
+        self.assertAlmostEqual(wave_cue(0,'turn'),self.seconds)
+        app._b_release_cut(self.seconds+.01)
+        app._b_short_repeats=True
+        self.assertAlmostEqual(wave_cue(10,'turn'),self.seconds/SHORT_REPEAT_RATE)
+        app._b_release_cut(10+self.seconds+.01)
+        self.assertAlmostEqual(wave_cue(20,'win'),self.seconds)
 
     def test_release_starts_next_cue_once_without_action(self):
         app=self.app

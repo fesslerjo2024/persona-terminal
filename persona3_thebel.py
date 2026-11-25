@@ -47,8 +47,8 @@ def _blocks(floor):
 
 
 class Hall:
-    def __init__(self,index,*,replay=False,patrol_offset=0):
-        self.index=index;self.floor=FLOORS[index];self.replay=replay
+    def __init__(self,index,*,replay=False,patrol_offset=0,floors=FLOORS,block="thebel"):
+        self.index=index;self.floor=floors[index];self.replay=replay;self.block=block
         self.patrol_offset=patrol_offset
         self.blocked=_blocks(self.floor)
         self.pos=self.floor.start;self.steps=0;self.alert=False;self.defeated=False
@@ -58,6 +58,12 @@ class Hall:
     @property
     def encounter(self):
         if not self.replay:return self.floor.encounter
+        from persona3_late_registry import REPLAY
+        if self.block in REPLAY:return REPLAY[self.block] if self.floor.guardian else self.floor.encounter
+        if self.block=='arqa':return 'arqa-patrol'
+        if self.block=='upper':return 'upper-patrol' if self.floor.guardian else self.floor.encounter
+        if self.block=='yabba_upper':return 'upper-yabba-patrol' if self.floor.guardian else self.floor.encounter
+        if self.block=='yabba':return 'yabba-patrol' if self.floor.guardian else self.floor.encounter
         return 'thebel-ascent' if self.floor.number>=8 else 'thebel-patrol'
 
     @property

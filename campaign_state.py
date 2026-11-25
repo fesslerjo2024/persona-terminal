@@ -17,7 +17,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import campaign_data as assets
-from battle_data import SKILLS, TEAM
+from battle_data import ELEMENTS, SKILLS, TEAM
 
 try:
     import fcntl
@@ -27,11 +27,14 @@ except ImportError:  # Unix is preferred; file-change checks still run elsewhere
 BASE = Path(__file__).resolve().parent
 DEFAULT_SAVE = BASE / 'campaign-save.json'
 VERSION = 1
+APRIL_OPENING_PAGES = 3
 MAX_SAVE_BYTES = 2 * 1024 * 1024
 MAX_SQUAD = 3
 START_SLOTS = 3
 MAX_SLOTS = 12
 MAX_PERSONA_SKILLS = 8
+SUMMON_BASE_COST = 50
+SUMMON_SKILL_COST = 10
 MEDALS = {'B': 1, 'A': 2, 'S': 3}
 
 
@@ -79,7 +82,7 @@ def _new_data():
         'version': VERSION, 'cleared': {},
         'credits': getattr(assets, 'START_CREDITS', 0),
         'teammates': teammates, 'squad': teammates[:squad_slots],
-        'personas': personas, 'loadout': loadout,
+        'personas': personas, 'stock': list(personas), 'loadout': loadout,
         'primary': loadout[0] if loadout else None,
         'slots': slots, 'squad_slots': squad_slots,
         'joker_hp': 0, 'joker_sp': 0, 'stats': {},
@@ -143,10 +146,36 @@ def _decode(raw, *, testing=False):
             or skill not in personas[name]
             for name, skill in inheritance.items()):
         raise ValueError('Invalid fusion skill provenance.')
-    if not _valid_names(loadout, set(personas)) or not 1 <= len(loadout) <= value['slots']:
+    # Before stock was separate, every registered Persona was usable.
+    stock = value.setdefault('stock', list(personas))
+    if not _valid_names(stock, set(personas)):
+        raise ValueError('Invalid Persona stock.')
+    if not _valid_names(loadout, set(stock)) or not 1 <= len(loadout) <= value['slots']:
         raise ValueError('Invalid Persona loadout.')
     if value.get('primary') not in loadout:
         raise ValueError('The primary Persona must be carried.')
+    memory = value.get('affinity_memory', {})
+    if not isinstance(memory, dict) or any(
+            n not in ENEMY_DATA or not isinstance(row, dict) or not row
+            or any(e not in ELEMENTS or f not in ('normal','weak','resist','null','repel','drain')
+                   for e,f in row.items()) for n,row in memory.items()):
+        raise ValueError('Invalid recorded Shadow affinities.')
+    if 'story_clues' in value:
+        from campaign_story import CLUES
+        if not _valid_names(value['story_clues'], CLUES):
+            raise ValueError('Invalid story discoveries.')
+    if 'story_opening' in value:
+        from campaign_story import COLD_OPEN, SCENES
+        steps = {f'casino:{beat}' for beat in SCENES[COLD_OPEN].beats}
+        steps.update(f'april:{i}' for i in range(APRIL_OPENING_PAGES))
+        steps.update(f'infiltration:{beat}' for beat in SCENES['castle-return'].beats)
+        steps.add('infiltration:fight')
+        if not isinstance(value['story_opening'], str) or value['story_opening'] not in steps:
+            raise ValueError('Invalid opening checkpoint.')
+    if 'pending_story_after' in value:
+        pending = value['pending_story_after']
+        if not isinstance(pending, str) or pending not in cleared:
+            raise ValueError('Invalid pending campaign scene.')
     return value
 
 def _valid_names(items, pool):
@@ -288,8 +317,13 @@ def _apply_rewards(data, rewards):
         if name not in PERSONA_DATA:
             raise ValueError('Unknown Persona reward: ' + str(name))
         if name not in data['personas']:
-            gained.setdefault('personas', []).append(name)
             data['personas'][name] = []
+            data['stock'].append(name)
+            gained.setdefault('personas', []).append(name)
+        elif name in personas and name not in data['stock']:
+            # An explicit first-clear Persona reward still grants a usable mask.
+            data['stock'].append(name)
+            gained.setdefault('personas', []).append(name)
         for skill in _as_list(bonus):
             if skill not in SKILLS:
                 raise ValueError('Unknown skill reward: ' + str(skill))
@@ -362,10 +396,13 @@ class Campaign:
         self.last_error = message
         raise CampaignError(message)
 
-    def new_game(self):
+    def new_game(self, *, opening=False):
         """Explicitly start over; save an exact sibling backup if one exists."""
         self.last_backup = None
-        self._commit(_new_data(), reset=True)
+        value = _new_data()
+        if opening:
+            value['story_opening'] = 'casino:start'
+        self._commit(value, reset=True)
         return self.last_backup
 
     def _commit(self, value, *, reset=False):
@@ -408,7 +445,7 @@ class Campaign:
         return (self.status == 'ready' and node_id in _ordered_nodes()
                 and (node_id == self.next_node or node_id in self._data['cleared']))
 
-    def clear(self, node_id, grade=None, *, contract=None):
+    def clear(self, node_id, grade=None, *, contract=None, queue_story=False, affinity_updates=None):
         grade = 'B' if grade is None else grade
         if not isinstance(grade, str) or grade not in MEDALS:
             return self._fail('Invalid combat medal.')
@@ -416,14 +453,34 @@ class Campaign:
             return self._fail('That operation is locked.')
         current = self._data['cleared'].get(node_id)
         value = self.data
+        if affinity_updates:
+            memory=value.setdefault('affinity_memory',{})
+            for species, readings in affinity_updates.items():
+                if readings:memory.setdefault(species,{}).update(readings)
         if current:
-            if MEDALS[grade] > MEDALS[current]:
-                value['cleared'][node_id] = grade
+            rewards={}
+            if contract is not None and getattr(contract,'persona',None) not in value['personas']:
+                from shadow_contract import merge_reward
+                try:
+                    only_contract=merge_reward(self.get_node(node_id),value['personas'],{},contract)
+                    rewards=_apply_rewards(value,only_contract)
+                except (ValueError,TypeError) as exc:
+                    return self._fail(str(exc))
+            if MEDALS[grade] > MEDALS[current]:value['cleared'][node_id]=grade
+            if rewards or value['cleared']!=self._data['cleared'] or (
+                    value.get('affinity_memory')!=self._data.get('affinity_memory')):
                 self._commit(value)
-            return {}
+            return rewards
         try:
             node = self.get_node(node_id)
             proposed = _reward_mapping(node)
+            if queue_story:
+                from campaign_story import RECRUIT_HANDOFFS
+                deferred = ('teammates', 'roster', 'team') if node_id in RECRUIT_HANDOFFS else ()
+                if node_id == 'pyramid-boss':
+                    deferred += ('oracle',)
+                if deferred:
+                    proposed = {key: value for key, value in proposed.items() if key not in deferred}
             if contract is not None:
                 from shadow_contract import merge_reward
                 proposed = merge_reward(node, value['personas'], proposed, contract)
@@ -431,8 +488,41 @@ class Campaign:
         except (ValueError, TypeError) as exc:
             return self._fail(str(exc))
         value['cleared'][node_id] = grade
+        if queue_story:
+            value['pending_story_after'] = node_id
         self._commit(value)
         return rewards
+
+    def checkpoint_opening(self, step):
+        value = self.data
+        if step == value.get('story_opening'):
+            return True
+        if step is None:
+            value.pop('story_opening', None)
+        else:
+            value['story_opening'] = step
+        return self._commit(value)
+
+    def finish_pending_story(self, node_id):
+        value = self.data
+        if value.get('pending_story_after') != node_id:
+            return True
+        from campaign_story import RECRUIT_HANDOFFS
+        if name := RECRUIT_HANDOFFS.get(node_id):
+            _apply_rewards(value, {'teammates': [name]})
+        if node_id == 'pyramid-boss':
+            _apply_rewards(value, {'oracle': _reward_mapping(self.get_node(node_id)).get('oracle', ())})
+        del value['pending_story_after']
+        return self._commit(value)
+
+    def remember_clues(self, discoveries):
+        value = self.data
+        old = value.get('story_clues', [])
+        new = _unique([*old, *sorted(discoveries)])
+        if new == old:
+            return True
+        value['story_clues'] = new
+        return self._commit(value)
 
     def equip_squad(self, names):
         if isinstance(names, str):
@@ -457,8 +547,8 @@ class Campaign:
             names = list(names)
         except TypeError:
             return self._fail('Choose a list of Personas.')
-        if not _valid_names(names, self._data['personas']) or not 1 <= len(names) <= self._data['slots']:
-            return self._fail(f"Choose 1–{self._data['slots']} distinct owned Personas.")
+        if not _valid_names(names, self._data['stock']) or not 1 <= len(names) <= self._data['slots']:
+            return self._fail(f"Choose 1–{self._data['slots']} distinct Personas in stock.")
         if primary is None:
             primary = self._data['primary'] if self._data['primary'] in names else names[0]
         if primary not in names:
@@ -493,7 +583,7 @@ class Campaign:
         if recipe is None or name not in PERSONA_DATA:
             return self._fail('No known fusion for ' + str(name) + '.')
         parents = tuple(recipe['parents'])
-        owned = self._data['personas']
+        owned = self._data['stock']
         missing = [donor for donor in parents if donor not in owned]
         cost = recipe['cost']
         if not _int(cost):
@@ -508,7 +598,7 @@ class Campaign:
         reason = ('Missing parents: ' + ', '.join(missing) if missing else
                   'Insufficient credits.' if self._data['credits'] < cost else '')
         return {'recipe': copy.deepcopy(recipe), 'donors': donors, 'reason': reason,
-                'available': not reason, 'registered': name in owned}
+                'available': not reason, 'registered': name in self._data['personas']}
 
     def fusion_preview(self, name, skill=None, donor=None):
         """Resolve exact changes without charging or touching the save."""
@@ -531,9 +621,14 @@ class Campaign:
                 reason = 'Already known. Your protected copy stays.'
             elif len(after) > MAX_PERSONA_SKILLS:
                 reason = 'No free skill slot. Existing learned skills stay protected.'
-            elif options['registered'] and skill == current:
+            elif name in self._data['stock'] and skill == current:
                 reason = 'No change to this Persona.'
+        parents = options['recipe']['parents']
+        before = self._data['loadout']
+        loadout = _unique(name if p in parents else p for p in before)
+        lead = name if self._data['primary'] in parents else self._data['primary']
         return {**options, 'available': not reason, 'reason': reason,
+                'consumed': parents, 'loadout': loadout, 'lead': lead,
                 'current': current, 'selected': skill, 'preserved': preserved,
                 'after': after, 'moves': changed,
                 'gains': [move for move in after if move not in old],
@@ -550,6 +645,8 @@ class Campaign:
         value = self.data
         value['credits'] -= options['recipe']['cost']
         value['personas'][name] = options['moves']
+        value['stock'] = _unique([p for p in value['stock'] if p not in options['consumed']] + [name])
+        value['loadout'], value['primary'] = options['loadout'], options['lead']
         if skill is not None:
             value.setdefault('fusion_skills', {})[name] = skill
         elif 'fusion_skills' in value:
@@ -559,16 +656,37 @@ class Campaign:
         self._commit(value)
         return name
 
-    def apply_skill_card(self, name, skill):
+    def summon_preview(self, name):
         if name not in self._data['personas']:
-            return self._fail('Register that Persona before teaching it a skill.')
+            return self._fail('That Persona is not in the Compendium.')
+        cost = SUMMON_BASE_COST + SUMMON_SKILL_COST * len(self.persona_spec(name)['skills'])
+        reason = ('Already in stock.' if name in self._data['stock'] else
+                  'Insufficient credits.' if self._data['credits'] < cost else '')
+        return {'cost': cost, 'available': not reason, 'reason': reason}
+
+    def summon(self, name):
+        preview = self.summon_preview(name)
+        if not preview['available']:
+            return self._fail(preview['reason'])
+        value = self.data
+        value['credits'] -= preview['cost']
+        value['stock'].append(name)
+        return self._commit(value)
+
+    def skill_card_block(self, name, skill):
+        if name not in self._data['stock']:
+            return 'Summon that Persona before teaching it a skill.'
         if self._data['skill_cards'].get(skill, 0) < 1:
-            return self._fail('No copy of that Skill Card is available.')
+            return 'No copy of that Skill Card is available.'
         skills = self.persona_spec(name)['skills']
         if skill in skills:
-            return self._fail('This Persona already knows that skill.')
+            return 'This Persona already knows that skill.'
         if len(skills) >= MAX_PERSONA_SKILLS:
-            return self._fail('This Persona has no room for a bonus skill.')
+            return 'This Persona has no room for a bonus skill.'
+        return ''
+
+    def apply_skill_card(self, name, skill):
+        if reason:=self.skill_card_block(name,skill):return self._fail(reason)
         value = self.data
         value['personas'][name].append(skill)
         value['skill_cards'][skill] -= 1
@@ -602,6 +720,7 @@ class TestingCampaign(Campaign):
                 data['personas']['Silky'] = []
         else:
             data['personas'] = {n: [] for n in PERSONA_DATA}
+        data['stock'] = list(data['personas'])
         data['slots'] = min(MAX_SLOTS, len(PERSONA_DATA))
         data['squad_slots'] = MAX_SQUAD
         data['credits'] = 9999

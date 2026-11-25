@@ -1,5 +1,6 @@
 """Signature All-Out lettering, drawn as part of the final action pose."""
 from wide_canvas import Canvas
+from detail_canvas import DotCanvas
 
 TYPE = dict(zip('ABDEFGHIJLMNOPRSTUVWY!',
     ('010/101/111/101/101','110/101/110/101/110','110/101/101/101/110',
@@ -46,15 +47,28 @@ def apply(frame,who,t,w,h):
     phase=min(1,(t-start)/.23)
     y=max(1,min(5,round(h*.075))-round(2*(1-phase)))
     skew=1 if who in ('Skull','Panther','Crow') else 0
+    # Hand-set bitmap letters occupy the same cells as before, but each
+    # pixel now has shape and depth on the 2×4 subcell grid.
+    dots=DotCanvas(w,h)
     for j in range(5):
         a=left+skew*((4-j)//2)
-        c.put(a-1,y+j,' '*(wide+2),'dim',True)
         for i,ch in enumerate(display):
             bits=TYPE[ch].split('/')[j]
-            c.put(a+i*4,y+j,''.join('#' if bit=='1' else ' ' for bit in bits),ink)
+            for k,bit in enumerate(bits):
+                if bit!='1':continue
+                x0=(a+i*4+k)*2
+                y0=(y+j)*4
+                for dx in range(2):
+                    for dy in range(4):
+                        dots.put(x0+dx,y0+dy,'white' if dy==0 and (i+k)%3==0 else ink)
+    for yy,row in enumerate(dots.finish()):
+        x=0
+        for run,color in row:
+            if run.strip():c.put(x,yy,run,color)
+            x+=len(run)
     x=max(margin,min(w-len(phrase)-margin,left+(wide-len(phrase))//2))
     c.put(x-1,y+6,' '+phrase+' ','white',True)
     for x0,d in ((left-4,-1),(left+wide+3,1)):
-        c.put(x0,y+1,'*',ink)
-        c.put(x0+d,y+2,'.',ink)
+        c.put(x0,y+1,'⠢',ink)
+        c.put(x0+d,y+2,'⠂',ink)
     return c.finish()

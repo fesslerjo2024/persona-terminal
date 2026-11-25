@@ -29,20 +29,25 @@ class GalleryTests(unittest.TestCase):
         self.save = self.root / 'slot.json'
         self.app = Surface(Campaign(self.save))
 
-    def test_title_shortcuts_back_and_save_untouched(self):
+    def test_extras_gallery_playback_returns_and_leaves_save_untouched(self):
+        from unittest.mock import patch
         self.app.story.new_game()
         before = {p.name: p.read_bytes() for p in self.root.iterdir()}
-        self.assertTrue(self.app.key('4'))
-        self.assertEqual((self.app.page,self.app.i), ('gallery',3))
-        self.app.gallery.key(self.app, '\n', now=0)
-        self.app.gallery.draw(self.app, now=0.2)
-        self.assertTrue(self.app.out)
-        self.assertNotIn('ROSE & REVOLVER', ' '.join(self.app.out))
-        self.assertTrue(self.app.key(ESC))  # Leave the preview first.
-        self.assertEqual(self.app.page, 'gallery')
-        self.assertTrue(self.app.key(ESC))
+
+        def exercise(*,startup):
+            self.assertFalse(startup)
+            self.assertEqual(self.app.page, 'gallery')
+            self.app.gallery.key(self.app, '\n', now=0)
+            self.app.gallery.draw(self.app, now=0.2)
+            self.assertTrue(self.app.out)
+            self.assertNotIn('ROSE & REVOLVER', ' '.join(self.app.out))
+            self.assertTrue(self.app.key(ESC))  # Leave the preview first.
+            self.assertEqual(self.app.page, 'gallery')
+            self.assertFalse(self.app.key(ESC))  # Return to the Extras caller.
+
+        with patch.object(self.app, 'run', side_effect=exercise):
+            self.app.run_extra('gallery')
         self.assertEqual(self.app.page, 'title')
-        self.assertFalse(self.app.key('5'))
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.root.iterdir()})
 
     def test_reel_renders_every_unique_clip_at_minimum_terminal_size(self):
@@ -76,7 +81,7 @@ class GalleryTests(unittest.TestCase):
         self.assertEqual(g.started,1.6)
         self.app.out.clear()
         g.draw(self.app,now=3.28)
-        self.assertEqual(sum(' ( * * ) ' == row for row in self.app.out),3)
+        self.assertGreater(sum('⠁'<=ch<='⣿' for run in self.app.out for ch in run),100)
         self.assertNotIn('WAVE CLEARED', ' '.join(self.app.out))
         self.assertTrue(g.key(self.app, ESC, now=3.3))
         self.assertIsNone(g.started)
@@ -105,37 +110,38 @@ class GalleryTests(unittest.TestCase):
         self.assertFalse(g.key(self.app,ESC,now=20.2))
         self.assertFalse(self.save.exists())
 
-    def test_testing_gallery_shortcut_round_trips_map_and_keeps_sandbox(self):
-        from copy import deepcopy
+    def test_practice_and_gallery_remember_selections_without_touching_story(self):
+        from unittest.mock import patch
         self.app.story.new_game()
         before=self.save.read_bytes()
-        self.assertTrue(self.app.key('3'))
-        self.assertTrue(self.app.testing)
-        self.app.key(C.KEY_RIGHT)
-        self.app.key(C.KEY_DOWN)
-        self.app.notice='TEST SESSION'
-        map_state=(self.app.ch,self.app.pick,dict(self.app.marks),self.app.notice)
-        practice_store=self.app.store
-        practice_data=deepcopy(practice_store.data)
-        self.app.draw_map()
-        self.assertIn('G ANIMATION GALLERY', ' '.join(self.app.out))
-        for key in ('g','G'):
-            self.assertTrue(self.app.key(key))
-            self.assertEqual(self.app.page,'gallery')
-            self.app.key('\n')
-            self.app.key(ESC)
-            self.assertEqual(self.app.page,'gallery')
-            self.app.key(ESC)
-            self.assertEqual(self.app.page,'map')
-            self.assertEqual((self.app.ch,self.app.pick,self.app.marks,self.app.notice),map_state)
+        def move_map(*,startup):
+            self.assertFalse(startup)
             self.assertTrue(self.app.testing)
-            self.assertIs(self.app.store,practice_store)
-            self.assertEqual(self.app.store.data,practice_data)
-        self.app.key(ESC)
-        self.assertEqual(self.app.page,'title')
-        self.app.key('4')
-        self.app.key(ESC)
-        self.assertEqual(self.app.page,'title')
+            self.app.key(C.KEY_RIGHT)
+            self.app.key(C.KEY_DOWN)
+            self.assertEqual((self.app.ch,self.app.pick),(1,1))
+            self.app.draw_map()
+            self.assertNotIn('ANIMATION GALLERY', ' '.join(self.app.out))
+            self.app.key('g')
+            self.assertEqual(self.app.page,'map')
+            self.assertFalse(self.app.key(ESC))
+        def move_gallery(*,startup):
+            self.app.key(C.KEY_RIGHT)
+            self.app.key(C.KEY_DOWN)
+            self.assertEqual((self.app.gallery.group,self.app.gallery.index),(1,1))
+            self.assertFalse(self.app.key(ESC))
+        def check_map(*,startup):
+            self.assertEqual((self.app.ch,self.app.pick),(1,1))
+            self.assertFalse(self.app.key(ESC))
+        def check_gallery(*,startup):
+            self.assertEqual((self.app.gallery.group,self.app.gallery.index),(1,1))
+            self.assertFalse(self.app.key(ESC))
+        for kind, action in (('practice',move_map),('gallery',move_gallery),
+                             ('practice',check_map),('gallery',check_gallery)):
+            with patch.object(self.app, 'run', side_effect=action):
+                self.app.run_extra(kind)
+            self.assertIs(self.app.store,self.app.story)
+            self.assertFalse(self.app.testing)
         self.assertEqual(self.save.read_bytes(),before)
 
     def test_story_map_does_not_take_testing_gallery_shortcut(self):
@@ -148,14 +154,14 @@ class GalleryTests(unittest.TestCase):
 
     def test_map_footer_and_classic_trials_escape_are_unambiguous(self):
         from unittest.mock import patch
-        self.app.key('3')
+        self.app.begin_extra('practice')
         with patch.object(self.app, 'put', wraps=self.app.put) as draw:
             self.app.draw_map()
         shortcuts=[args for args,_ in draw.call_args_list
-                   if 'G ANIMATION GALLERY' in str(args[2]) or 'T CLASSIC TRIALS' in str(args[2])]
+                   if 'T CLASSIC TRIALS' in str(args[2])]
         self.assertEqual(len(shortcuts),1)
         self.assertEqual(shortcuts[0][0],self.app.h-2)
-        self.assertIn('ESC TITLE',shortcuts[0][2])
+        self.assertIn('ESC EXTRAS',shortcuts[0][2])
         self.app.key('t')
         self.assertEqual(self.app.page,'trials')
         self.app.key('t')
@@ -173,6 +179,5 @@ class GalleryTests(unittest.TestCase):
         self.assertIs(self.app._b_battle,battle)
         self.app.key(ESC)
         self.assertEqual(self.app.page,'map')
-        self.app.key(ESC)
-        self.assertEqual(self.app.page,'title')
+        self.assertFalse(self.app.key(ESC))
         self.assertFalse(self.save.exists())

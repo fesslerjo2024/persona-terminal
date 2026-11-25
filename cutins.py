@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import cinema
 
 
-ACTIVE_ORACLE_FEATURES = frozenset(("support", "ufo"))
+ACTIVE_ORACLE_FEATURES = frozenset(("support", "guard", "ufo"))
 
 
 @dataclass(frozen=True)

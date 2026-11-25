@@ -11,6 +11,11 @@ PIGMENTS = {
     'ochre':  (172, C.COLOR_YELLOW),
     'wine':   (132, C.COLOR_MAGENTA),
     'slate':  (103, C.COLOR_BLUE),
+    'ink':    (235, C.COLOR_BLUE),
+    'indigo': (17, C.COLOR_BLUE),
+    'plum':   (53, C.COLOR_MAGENTA),
+    'umber':  (52, C.COLOR_RED),
+    'moss':   (22, C.COLOR_GREEN),
 }
 IDS = {name:i for i,name in enumerate(PIGMENTS,7)}
 

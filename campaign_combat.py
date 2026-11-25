@@ -6,12 +6,17 @@ import campaign_data as config
 from shadow_contract import offers
 
 
+def operation_unavailable(node,name):
+    return bool(node and name!='Joker' and
+                (node.get('party_size')==1 or name in node.get('forbidden_team', ())))
+
+
 def stage_party(campaign,node):
     """Return the actual deployed allies, shared by the briefing and combat."""
     if node.get('party_size')==1:
         return {}
     team = {name: spec for name,spec in campaign.party_loadout().items()
-            if name not in node.get('forbidden_team', ())}
+            if not operation_unavailable(node,name)}
     for name,spec in team.items():
         spec.update(node.get('team_overrides', {}).get(name, {}))
     return team
@@ -54,13 +59,15 @@ def build_stage(campaign, node_id, seed=None):
             for k in growth:growth[k]+=earlier.get('reward',{}).get(k,0)
     if node.get('party_size')==1:
         growth['joker_hp']+=32;growth['joker_sp']+=12
-    contracts = (offers(node,data['personas']) if getattr(campaign,'path',None) is not None
-                 and node_id not in data['cleared'] else {})
+    persistent = getattr(campaign,'path',None) is not None
+    contracts = offers(node,data['personas']) if persistent else {}
     b = Battle(tuple(team), node['title'], seed=seed,
                encounter_config={**node, 'party_size':len(team)+1,'navigator':nav,
                                  'oracle_features': allowed.intersection(data.get('oracle',())),
                                  'available_thieves':('Joker',*data.get('teammates',())),
-                                 'contract_offers':contracts},
+                                 'contract_offers':contracts,
+                                 'remember_affinities':persistent,
+                                 'affinity_memory':data.get('affinity_memory',{})},
                team_data=team, persona_pool=masks, enemy_data=config.ENEMY_DATA,
                joker_stats={'hp':180+growth['joker_hp'],'sp':55+growth['joker_sp']})
     b.items.update(node.get('items', {}))

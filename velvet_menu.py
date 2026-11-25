@@ -53,3 +53,17 @@ def detail_split(app):
     for y in range(6,app.h-6):
         app.put(y,x,'│',BLUE)
     return x+2,app.w-x-8
+
+
+def card_description(name):
+    from battle_data import SKILLS
+    skill=SKILLS[name]
+    kind=skill['kind']
+    label=(skill.get('element','')+' damage' if kind=='damage' else
+           'Restore HP' if kind=='heal' else 'Restore SP' if kind=='restore' else
+           'Inflict '+skill.get('status','ailment') if kind=='ailment' else
+           ('Raise ' if kind=='buff' else 'Lower ')+skill.get('stat','stats') if kind in ('buff','debuff') else
+           {'dekaja':'Remove buffs','dekunda':'Remove debuffs','cure':'Clear ailments','revive':'Revive'}.get(kind,kind.title()))
+    target={'enemy':'one foe','enemies':'all foes','ally':'one ally','allies':'all allies'}.get(skill['target'],skill['target'])
+    cost=(f'{skill["sp"]} SP' if skill.get('sp') else f'{skill["hp"]}% HP' if skill.get('hp') else '')
+    return ' • '.join(part for part in (label,target,cost) if part)

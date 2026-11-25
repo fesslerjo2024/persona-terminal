@@ -4,13 +4,15 @@ from unittest.mock import patch
 
 import cinema
 import cutins
+import satanael_scene
 
 
 class NativeRegistryTests(unittest.TestCase):
     def test_native_catalog_matches_emitted_cards_and_known_durations(self):
         titles = {card[0] for card in (*cutins.ALL_OUT.values(), *cutins.SHOWTIMES.values(),
                                      cutins.ORACLE, cutins.ORACLE_SUPPORT, cutins.FINAL_GUARD)}
-        self.assertEqual(titles, cinema._native_catalog().keys())
+        self.assertEqual(titles|{satanael_scene.TITLE}, cinema._native_catalog().keys())
+        self.assertEqual(cutins.duration(satanael_scene.TITLE), satanael_scene.SECONDS)
         for title in titles:
             with self.subTest(title=title):
                 self.assertTrue(cinema.has(title))

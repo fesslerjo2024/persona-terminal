@@ -45,6 +45,7 @@ class GalleryBaselineTests(unittest.TestCase):
                     row, = [line for line in strings if clip.title in line]
                     if clip.duo:
                         self.assertIn(' + '.join(clip.duo), row)
-                    self.assertEqual('Preview only' in row, clip.title == 'ORACLE // FINAL GUARD')
+                    self.assertEqual('Preview only' in row, clip.preview_only)
+                    if clip.title == 'ORACLE // FINAL GUARD':self.assertFalse(clip.preview_only)
                 gallery.key(app, curses.KEY_RIGHT, now=0)
             self.assertFalse(gallery.key(app, ESC, now=0))

@@ -5,7 +5,10 @@ from types import MappingProxyType
 
 from wide_canvas import Canvas
 
-TRANSITION_SECONDS = 1.45
+TRANSITION_SECONDS = 2.68
+STILL_SECONDS = 1.45
+_STRIKE_AT = 1.80
+_FREEZE_AT = 1.98
 
 
 @dataclass(frozen=True)
@@ -24,14 +27,17 @@ BEATS = (
         'The dorm is still lit. Yukari slides a room key across the desk. “Get some sleep. You can ask about the station in the morning.”',
     ), 'arrival'),
     Beat('awakening', '04/09', 'THE ROOFTOP', (
-        'The dorm lights cut out. Yukari pulls you onto the roof, then stops short. Something has followed you up the stairs.',
-        'Yukari: “You saw it too, right? Okay. Good. I really needed someone else to see it.”',
-        'The shape closes in. When you stand between it and Yukari, something answers: Orpheus.',
+        'The dorm goes dark. A creature follows you and Yukari onto the roof.',
+        'Yukari drops her Evoker, a gun-shaped device. You pick it up and hear a voice: “Orpheus.”',
+        'Orpheus is your Persona. Call on him to protect Yukari from the Shadows.',
     ), 'awakening'),
+    Beat('briefing', '04/20', 'THE HOUR BETWEEN DAYS', (
+        'Mitsuru explains: the Dark Hour begins at midnight. Most people turn into coffins and never remember it. The creatures that hunt here are Shadows.',
+        'Ikutsuki, the adviser to S.E.E.S., asks you to join. Mitsuru and the others investigate the Dark Hour and fight the Shadows.',
+    ), 'dorm'),
     Beat('tartarus', '04/20', 'THE FIRST CLIMB', (
-        'At midnight, the school becomes Tartarus. Mitsuru takes the radio. The rest of you take the stairs.',
-        'Mitsuru: “This is reconnaissance. Listen for my signal, and come back as a group.”',
-        'Junpei: “Right. First day on the job and we’re climbing the world’s worst staircase.”',
+        'During the Dark Hour, your school turns into a tower called Tartarus. Mitsuru takes the radio.',
+        'Mitsuru: “Tonight we’re mapping the first floor. Makoto, take Yukari and Junpei. Get the route down and come back together.”',
     ), 'tartarus'),
     Beat('relay', '04/21', 'KEEP THE SIGNAL', (
         'Mitsuru taps the dorm receiver. The signal thins above the first floors of Thebel. A relay point would make the return trip safer.',
@@ -50,230 +56,146 @@ BEATS = (
 BY_ID = MappingProxyType({beat.id: beat for beat in BEATS})
 
 
-def _arc(c,x,y,rx,ry,ink,start=0,stop=2*pi):
-    last=(x+rx*cos(start),y+ry*sin(start))
-    for i in range(1,33):
-        a=start+(stop-start)*i/32
-        here=(x+rx*cos(a),y+ry*sin(a))
-        c.line(*last,*here,ink)
-        last=here
+# Original three-row segment font for the foreground readouts.
+_SEGMENTS = {
+    '0': (' __ ', '|  |', '|__|'),
+    '1': ('  /|', '   |', '   |'),
+    '2': (' __ ', ' __|', '|__ '),
+    '3': (' __ ', ' __|', ' __|'),
+    '4': ('    ', '|__|', '   |'),
+    '5': (' __ ', '|__ ', ' __|'),
+    '6': (' __ ', '|__ ', '|__|'),
+    '7': (' __ ', '  / ', ' /  '),
+    '8': (' __ ', '|__|', '|__|'),
+    '9': (' __ ', '|__|', ' __|'),
+    ':': (' ', '*', '*'),
+}
 
 
-def _stars(c,t,ink='slate'):
-    for i in range(max(8,c.w//4)):
-        x=(i*41+i*i*3)%c.w
-        y=(i*21+i*i//5)%max(1,int(c.h*.60))
-        if (i+round(t*8))%6:
-            c.put(x,y,'+' if (i+round(t*6))%11==0 else '.',ink)
+def _clock_point(cx,cy,angle,u,v):
+    # Rotate in screen space, accounting for the aspect of terminal cells.
+    return (cx+cos(angle)*u-1.9*sin(angle)*v,
+            cy+sin(angle)*u/1.9+cos(angle)*v)
 
 
-def _city(c,horizon,dawn=False):
-    for x in range(-2,c.w,6):
-        k=x//6
-        top=horizon-max(1,round(c.h*(.07+((k*k+3*k)%9)*.01)))
-        size=3+(k*k)%5
-        ink='slate' if k%3 else 'navy'
-        c.line(x,top,x+size,top,ink,'_')
-        c.line(x,top,x,horizon,ink,'|')
-        c.line(x+size,top,x+size,horizon,ink,'|')
-        for y in range(top+1,horizon,2):
-            if (k+y)%3:
-                c.put(x+1,y,'.' if k%2 else ':','amber' if dawn else 'teal' if k%4==0 else 'navy')
-    c.line(0,horizon,c.w-1,horizon,'navy','_')
+def _clock_arc(c,point,rx,ry,ink):
+    n=max(24,int(rx*8))
+    for i in range(n):
+        a=i*2*pi/n
+        x,y=point(rx*cos(a),ry*sin(a))
+        xx,yy=point(rx*cos(a+.01),ry*sin(a+.01))
+        dx,dy=xx-x,yy-y
+        glyph='-' if abs(dy)<abs(dx)*.29 else '|' if abs(dx)<abs(dy)*1.30 else '/' if dx*dy<0 else '\\'
+        c.put(round(x),round(y),glyph,ink)
 
 
-def _tracks(c,vx,vy,t):
-    for j in (-2,-1,1,2):
-        c.line(vx+j*1.2,vy,c.w*(.5+j*.185),c.h-1,'navy')
-    for y in range(vy+1,c.h):
-        stretch=(y-vy)/max(1,c.h-vy-1)
-        if (y-vy+round(t*2))%int(2+4*stretch)==0:
-            span=round(c.w*(.024+.37*stretch))
-            c.put(round(vx)-span,y,'-'*(2*span+1),'slate')
-
-
-def _platform(c,t,dawn=False):
-    w,h=c.w,c.h
-    _stars(c,t,'ochre' if dawn else 'slate')
-    horizon=round(h*.58)
-    if dawn:
-        _arc(c,w*.69,horizon,w*.13,h*.21,'ochre',pi,2*pi)
-        _arc(c,w*.69,horizon-1,w*.11,h*.18,'amber',pi,2*pi)
-    _city(c,horizon,dawn)
-    vx=round(w*.48)
-    _tracks(c,vx,horizon,t)
-    c.line(0,round(h*.073),vx-3,horizon-1,'navy')
-    c.line(w-1,round(h*.32),vx+4,horizon-1,'navy')
-    for i in range(4):
-        x=round(w*(.08+i*.105))
-        top=round(h*(.18+i*.088)); foot=round(h*(.89-i*.066))
-        c.line(x,top,x,foot,'slate','|')
-        c.put(x-1,top,'[--]' if i<2 else '[-]','amber' if dawn else 'cyan')
-        if i<2:
-            c.line(x+1,top+1,x+4,foot-1,'navy','.')
-    c.put(round(w*.76),horizon-4,('.--------.','| .. ..  |','|   .    |','+--------+'),
-          'ochre' if dawn else 'teal')
-    if not dawn:
-        x,y=round(w*.23),round(h*.79)
-        c.put(x,y,('  _  ','_|_|_','|###|','|___|'),'slate')
-        c.line(x+1,y+4,x+9,y+5,'navy','.')
-    else:
-        c.put(round(w*.18),round(h*.78),(' . ~ ' if int(t*4)%2 else '  ~ .',
-              r' /---\ ',r' \___/ '),'amber')
-
-
-_HARP = (
-    r'     .-*-.',
-    r'    / .-. \ ',
-    r'   | /| |\ |',
-    r'   | \| |/ |',
-    r'   /\__|__/\\',
-    r'  /  /||| \  \\',
-    r' /__/ |||  \__\\',
-    r'      \_/',
-)
-
-
-def _roof(c,t):
-    w,h=c.w,c.h
-    _stars(c,t)
-    rim=round(h*.63)
-    _arc(c,w*.72,h*.29,w*.12,h*.18,'teal')
-    _arc(c,w*.72+1,h*.29,w*.10,h*.17,'navy',pi*.52,pi*1.48)
-    _city(c,rim)
-    for x in range(0,w,7):
-        c.line(x,rim-3,x,rim+4,'navy','|')
-        c.put(x,rim-4,'+','slate')
-        c.put(x+1,rim-2,'/\\','navy')
-        c.put(x+1,rim,'\\/','navy')
-    c.line(0,rim+4,w-1,rim+4,'slate','=')
-    for x in range(-4,w+5,12):
-        c.line(w*.51+(x-w*.51)*.27,rim+5,x,h-1,'navy')
-    x=round(w*.28); y=max(2,round(h*.26))
-    for k,row in enumerate(_HARP):
-        c.put(x,y+k,row,'teal' if k%3 else 'cyan',opaque=True)
-    for i in range(11):
-        angle=i*2*pi/11+t*.45
-        xx=round(x+6+(w*.082+(i%2)*3)*cos(angle))
-        yy=round(y+4+(h*.16+(i%3))*sin(angle))
-        c.put(xx,yy,'.' if i%3 else '*','cyan' if i%4==0 else 'slate')
-
-
-def _desk(c,t,variant):
-    w,h=c.w,c.h
-    floor=round(h*.70)
-    c.line(0,round(h*.26),w-1,round(h*.26),'navy','_')
-    for x in range(0,w,max(9,w//9)):
-        if variant!='velvet':
-            c.line(x,round(h*.27),x,floor,'navy','|')
-            c.put(x+1,floor-2,'..','slate')
-        else:
-            _arc(c,x+w*.055,round(h*.42),w*.095,h*.26,'navy',pi,2*pi)
-            for dx in (-4,0,4):
-                c.line(x+dx,round(h*.31),x+dx,floor,'navy','|')
-    c.line(0,floor,w-1,floor,'slate','=')
-    for y in range(floor+1,h,3):
-        c.put(0,y,('..    '*((w+5)//6))[:w],'navy')
-    x=round(w*.69); y=max(1,floor-8)
-    if variant=='velvet':
-        c.put(x-3,y+1,(" .'. ","  |  "," _-_ "),'teal')
-        c.put(x+13,y+1,(' .*. ','  |  ',' _-_ '),'teal')
-        c.put(x,y+4,(r' /____\/____\ ',r'\\____/\____//','      |      '),'slate')
-        c.put(x-7,y+7,'='*min(28,w-x+1),'teal')
+def _digit_clock(c,cx,cy,angle,scale,label,ink):
+    # Output remains native cells, with a tighter fall-back as the shot begins.
+    if scale<.76:
+        c.put(round(cx)-len(label)//2,round(cy),label,ink)
         return
-    c.put(x-5,y,(
-        '.--------------.','|.------------.|','||            ||','||            ||',
-        '||____________||','|___...________|',r'   /_____\     ',
-    ),'slate',opaque=True)
-    if variant=='relay':
-        phase=int(t*7)%12
-        c.put(x-2,y+2,'...:'+('/\\' if phase<6 else '\\/')+':..','teal')
-        c.put(x-2,y+3,' _ . . . ','navy')
-        c.put(x+14,y+1,('  /',' +','[=]','[:]','[_]'),'slate')
-    else:
-        c.put(x-2,y+2,'- .   _.','navy')
-        c.put(x-2,y+3,' .-   -:','teal')
-        c.put(x+14,y+4,(' _ ',r'/__\\',r'\__/'),'amber')
-    c.put(x-6,floor+1,(' __    ____________ ',r'|__|  /____:____:_/ '),'slate')
+    shapes=tuple(_SEGMENTS[s] for s in label)
+    width=sum(len(s[0])+1 for s in shapes)-1
+    rows=tuple(' '.join(shape[i] for shape in shapes) for i in range(3))
+    for i,row in enumerate(rows):
+        for j,ch in enumerate(row):
+            if ch==' ':
+                continue
+            x,y=_clock_point(cx,cy,angle,(j-width/2)*scale,(i-1)*scale)
+            c.put(round(x),round(y),ch,ink)
+            if scale>1.2:
+                c.put(round(x)+1,round(y),ch,ink)
 
 
-def _stairs(c,t,animated=1.):
-    w,h=c.w,c.h
-    vx=w*.50; vy=round(h*.59)
-    _stars(c,t,'forest' if animated>.62 else 'navy')
-    for i in range(4):
-        r=(.11+i*.12)*w
-        _arc(c,vx,vy-h*.12,r,h*(i*.12+.09),'forest' if i==0 else 'navy',pi,2*pi)
-        for side in (-1,1):
-            x=vx+side*r
-            c.line(x,vy-h*.12,x,vy+i,'slate' if i%2 else 'navy','|')
-    _tracks(c,vx,vy,t)
-    c.put(round(vx)-4,vy-2,('.-------.','|  /|\\  |','+-------+'),'forest' if animated>.62 else 'teal')
-    for k in range(4):
-        x=round(vx+sin(k*1.45+t*.8)*w*.28)
-        y=round(vy+h*.08+(k%3)*h*.075)
-        c.put(x,y,'.' if k%2 else '+','forest')
+def _analog(c,cx,cy,rx,ry,angle,second,ink,dim,roman=False):
+    def point(u,v):
+        return _clock_point(cx,cy,angle,u,v)
 
-
-def _monorail(c,t):
-    w,h=c.w,c.h
-    _stars(c,t)
-    horizon=round(h*.60)
-    _city(c,horizon)
-    _tracks(c,w*.52,horizon,t)
-    # The front and trailing vestibule skew separately into the elevated rail.
-    front=round(w*.83); far=round(w*.20)
-    top=round(h*.25); bottom=round(h*.74)
-    c.line(far,horizon-2,front-5,top,'slate')
-    c.line(far,horizon+3,front+2,bottom,'teal')
-    for i in range(6):
-        q=i/6
-        x=round(far+(front-far)*q)
-        y=round(horizon-2+(top-horizon+2)*q)
-        b=round(horizon+3+(bottom-horizon-3)*q)
-        c.line(x,y,x,b,'navy','|')
-        z=max(2,round(w*(.025+q*.068)))
-        c.put(x+1,y+1,'[_'+'-'*max(0,z-2)+']','teal')
-        if i>2:
-            c.put(x+2,y+2,'..','slate')
-    c.put(front-6,top-1,(
-        ' .------.',r'/.. .. ..\ ','| ._  _. |',r'|   \/   |','|:      :|',r' \======/ ',
-    ),'cyan',opaque=True)
-    for x in (front-6,front+3):
-        c.line(x,top+4,x+(.13*w if x>front else -.09*w),bottom+2,'teal','.')
-    for i in range(6):
-        xx=(i*17+round(t*33))%w
-        c.put(xx,bottom+1+i%3,'.---','navy')
+    if roman:
+        # A matte face occludes the overlapping clocks inside the bezel only.
+        yn=max(0,round(cy-ry*1.33)); yx=min(c.h,round(cy+ry*1.33)+1)
+        xn=max(0,round(cx-rx*1.33)); xx=min(c.w,round(cx+rx*1.33)+1)
+        for y in range(yn,yx):
+            for x in range(xn,xx):
+                u,v=_clock_point(0,0,-angle,x-cx,y-cy)
+                if (u/rx)**2+(v/ry)**2<.91:
+                    c.put(x,y,' ',dim,opaque=True)
+    _clock_arc(c,point,rx,ry,ink)
+    if roman:
+        _clock_arc(c,point,max(1,rx-2.8),max(1,ry-1.43),dim)
+    names=('XII','I','II','III','IV','V','VI','VII','VIII','IX','X','XI')
+    for i in range(12):
+        a=(i/6-.5)*pi
+        x,y=point(rx*.86*cos(a),ry*.86*sin(a))
+        if roman and rx>9 and ry>5 and (i%3==0 or rx>15):
+            name=names[i]
+            c.put(round(x)-len(name)//2,round(y),name,ink if i%3==0 else dim,opaque=True)
+        else:
+            c.put(round(x),round(y),'.' if i%3 else '+',dim)
+    x0,y0=point(0,0)
+    # Both hands converge on twelve. The thin second hand travels exactly
+    # the last four seconds in lockstep with the digital surround.
+    for length,offset,ch in ((.40, -.018 if second else 0.,'|'),
+                             (.62,(-.105*(60-second)/4) if second else 0.,'|')):
+        x,y=point(rx*length*sin(offset),-ry*length*cos(offset))
+        c.line(x0,y0,x,y,ink,ch)
+        if roman and length>.5 and rx>9:
+            # A spear tip and long two-cell spine distinguish the main hands.
+            c.put(round(x),round(y),'^',ink)
+            c.line(x0,y0,x,y+1,ink,'|')
+    if second:
+        a=(second-60)*pi/30
+        x,y=point(rx*.74*sin(a),-ry*.74*cos(a))
+        c.line(x0,y0,x,y,dim,'.')
+    c.put(round(x0),round(y0),'*' if roman else '+',ink)
 
 
 def _hour(c,t):
+    """Reload-like clock montage: rush in, count down, stop on the green frame."""
+    frozen=t>=_FREEZE_AT
+    progress=min(1.,t/1.13)
+    pull=progress*progress*(3-2*progress)
+    camera=.18+.82*pull
     w,h=c.w,c.h
-    t=min(t,TRANSITION_SECONDS)
-    p=t/TRANSITION_SECONDS
-    horizon=round(h*.62)
-    if p<.47:
-        _stars(c,t)
-        _city(c,horizon)
-        cx,cy=w*.50,h*.37
-        rx,ry=w*.144,h*.28
-        _arc(c,cx,cy,rx,ry,'slate')
-        _arc(c,cx,cy,rx+2,ry+1,'navy',pi*.58,pi*1.55)
-        x,y=round(cx),round(cy)
-        a=max(0,1-p/.39)*.94
-        c.line(cx,cy,cx,cy-ry*.46,'teal','|')
-        c.line(cx,cy,cx-rx*.70*sin(a),cy-ry*.74*cos(a),'cyan','|' if p>.36 else None)
-        c.put(x,y,'*' if p>.36 else '+','white' if p>.36 else 'teal')
-    if p>.34:
-        _stairs(c,t,p)
-        right=round(w*(-.16+1.31*p))
-        pale='teal' if p<.60 else 'forest'
-        for j in range(4):
-            x=right-j*max(3,w//16)
-            c.line(x,0,x+w*.18,h-1,pale,'/' if j%2 else '.')
-        for j in range(12):
-            y=(j*13+j*j+int(p*13))%h
-            x=(j*5+right-round((j%5)*w*.055))%w
-            c.put(x,y,'*' if j%3==0 else '.', 'white' if p<.57 and j%3==0 else pale)
+    mid=w*.47; level=h*.49
+    midnight=t>=_STRIKE_AT
+    second=0 if midnight else 56+min(3,int(t/_STRIKE_AT*4))
+    if frozen:
+        ink,shade,back='green','forest','forest'
+    elif t>.60:
+        ink,shade,back='white','dim','slate'
+    else:
+        ink,shade,back='dim','dim','dim'
+
+    def place(x,y):
+        return mid+(w*x-mid)*camera,level+(h*y-level)*camera
+
+    # Angled neighboring timepieces and different layers of digital readouts
+    # follow the same camera, not an in-world skyline or a loading transition.
+    for x,y,rx,ry,angle in ((.18,.26,.112,.23,-.21),(.85,.14,.138,.24,.25),
+                            (.85,.86,.153,.23,-.31)):
+        cx,cy=place(x,y)
+        _analog(c,cx,cy,max(1.4,w*rx*camera),max(1.3,h*ry*camera),
+                angle,second,back,back)
+
+    for x,y,angle,zoom,is_24 in (
+        (.065,.44,.04,1.10,False),(.86,.39,-.24,.71,True),
+        (.89,.55,.06,.95,True),(.24,.74,-.31,.69,False),
+        (.78,.82,-.10,1.43,False),(.65,.13,-.30,.66,True),
+    ):
+        if midnight:
+            label='00:00' if is_24 else '0000'
+        else:
+            label='23:59' if is_24 else '1159'
+        cx,cy=place(x,y)
+        _digit_clock(c,cx,cy,angle,zoom*camera,label,shade if zoom<.8 else ink)
+
+    cx,cy=place(.27,.91)
+    _digit_clock(c,cx,cy,-.19,.81*camera,
+                 '00:00:00' if midnight else f'11:59:{second:02}',ink)
+    cx,cy=place(.474,.53)
+    _analog(c,cx,cy,max(2,w*.235*camera),max(2,h*.39*camera),
+            .23,second,ink,shade,roman=True)
 
 
 def render(art,t,w,h):
@@ -282,18 +204,20 @@ def render(art,t,w,h):
     if not w or not h:
         return c.finish()
     t=max(0.,float(t))
+    if art=='dark_hour':
+        _hour(c,min(t,TRANSITION_SECONDS))
+        return c.finish()
+    if art in ('tartarus','thebel'):
+        from persona3_environment_reels import tartarus
+        return tartarus(min(t,STILL_SECONDS),w,h)
+    t=min(t,STILL_SECONDS)
+    from persona3_scenic_detail import lounge, monorail_plate, platform, roof
     if art in ('arrival','finale'):
-        _platform(c,t,art=='finale')
-    elif art=='awakening':
-        _roof(c,t)
-    elif art in ('tartarus','thebel'):
-        _stairs(c,t)
-    elif art in ('dorm','relay','velvet'):
-        _desk(c,t,art)
-    elif art=='monorail':
-        _monorail(c,t)
-    elif art=='dark_hour':
-        _hour(c,t)
-    else:
-        raise KeyError(art)
-    return c.finish()
+        return platform(t,w,h,art=='finale')
+    if art=='awakening':
+        return roof(t,w,h)
+    if art in ('dorm','relay','velvet'):
+        return lounge(t,w,h,art)
+    if art=='monorail':
+        return monorail_plate(t,w,h)
+    raise KeyError(art)

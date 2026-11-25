@@ -34,7 +34,7 @@ class PyramidMapTests(unittest.TestCase):
 
     def test_testing_focus_traces_the_tunnel_and_moves_projection(self):
         app=RecordedSurface(Campaign(self.path))
-        app.key('3')
+        app.begin_extra('practice')
         app.ch=self.chapter
         for w,h in ((65,25),(96,34)):
             app.w,app.h=w,h

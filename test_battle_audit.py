@@ -29,6 +29,15 @@ class Surface(CampaignApp):
         return '\n'.join(''.join(row) for row in self.rows)
 
 
+def advance_linear_story(app):
+    for _ in range(16):
+        if app.page != 'story-scene':
+            return
+        beat=app.story_scene.scene.beats[app.story_scene.beat]
+        app.key('\n' if beat.enter else beat.choices[0][0])
+    raise AssertionError('Story did not reach a handoff.')
+
+
 def museum(app):
     app.start_testing()
     app.key(C.KEY_RIGHT)
@@ -103,6 +112,7 @@ class BattleAuditTests(TestCase):
             store.new_game()
             app=Surface(store)
             app.key('1');app.key('1');app.key('\n')
+            advance_linear_story(app)
             b=app._b_battle
             app.key('1');app.key(C.KEY_RIGHT)
             frame=app.capture(app.battle_page)
@@ -143,6 +153,7 @@ class BattleAuditTests(TestCase):
             store.new_game()
             app=Surface(store)
             app.key('1');app.key('1');app.key('\n')
+            advance_linear_story(app)
             before=path.read_bytes()
             self.assertTrue(app.key('q'))
             self.assertIn('QUIT THIS ATTEMPT?',app.capture(app.draw_departure))
@@ -173,6 +184,7 @@ class BattleAuditTests(TestCase):
                 store.new_game()
                 app=Surface(store)
                 app.key('1');app.key('1');app.key('\n')
+                advance_linear_story(app)
                 before=path.read_bytes()
                 app._b_battle.phase='win'
                 with patch.object(store,'clear',side_effect=CampaignError('Injected save failure.')):

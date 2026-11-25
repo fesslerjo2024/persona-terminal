@@ -1,214 +1,196 @@
-"""The Persona 5 Terminal calling card, rendered in physical terminal cells."""
+"""Original 2×4 dot-art Calling Card animation for the live Persona 5 title."""
 from math import cos, hypot, pi, sin
-from wide_canvas import Canvas
+
+from detail_canvas import DotCanvas
 
 DURATION = 5.0
-_EMBLEM_X = 1.50 * 1.12
-_EMBLEM_Y = 1.32 * 1.12
-# Character-cell interpretation of the calling-card emblem. The tilted
-# top hat and its flame sit above the domino mask, not in the eye cutout.
-# Reference: Sega's Royal announcement and the licensed Artovision card.
-_HAT = ((-.64,-.91),(.43,-.86),(.60,-.71),(.51,-.24),(.87,-.17),
-        (.92,-.05),(.66,.08),(-.65,.06),(-.93,-.04),(-.89,-.19),(-.58,-.24))
-_BAND = ((-.59,-.36),(.52,-.40),(.53,-.26),(-.57,-.22))
-_FLAME = ((.42,-.40),(.28,-.52),(.38,-.68),(.29,-.84),(.47,-.76),
-          (.55,-.96),(.61,-.72),(.74,-.67),(.73,-.51),(.61,-.37))
-_MASK = (
-    (-.93,.09),(-.58,.19),(-.24,.20),(0,.29),(.24,.20),(.58,.19),(.93,.09),
-    (.86,.38),(.69,.59),(.44,.62),(.21,.49),(0,.68),(-.21,.49),
-    (-.44,.62),(-.69,.59),(-.86,.38),
-)
-_LEFT_EYE = ((-.75,.29),(-.49,.29),(-.20,.39),(-.39,.50),(-.58,.46))
-_RIGHT_EYE = tuple((-x,y) for x,y in _LEFT_EYE)
+TAU=2*pi
+HAT=((-1,-.34),(-.63,-.44),(-.58,-.96),(-.36,-1.04),(.41,-.96),
+     (.54,-.85),(.55,-.44),(.99,-.32),(.93,-.19),(.68,-.12),(-.65,-.12),(-1,-.21))
+BAND=((-.62,-.49),(.54,-.46),(.56,-.35),(-.65,-.38))
+FLAME=((.49,-.49),(.28,-.66),(.39,-.87),(.35,-1.14),(.53,-1.01),
+       (.67,-1.21),(.68,-.96),(.87,-.84),(.86,-.60),(.69,-.46))
+MASK=((-1,-.10),(-.83,.27),(-.64,.55),(-.42,.69),(-.21,.53),(0,.72),
+      (.21,.53),(.42,.69),(.64,.55),(.83,.27),(1,-.10),(.59,.04),(.25,.11),
+      (0,.22),(-.25,.11),(-.59,.04))
+LEFT_EYE=((-.77,.13),(-.48,.19),(-.23,.31),(-.41,.45),(-.57,.37))
+RIGHT_EYE=tuple((-x,y) for x,y in LEFT_EYE)
 
 
-def _smooth(x):
-    x = min(1., max(0.,x))
-    return x*x*(3-2*x)
-
-
-def _inside(x,y,polygon):
-    hit = False
-    px,py = polygon[-1]
-    for nx,ny in polygon:
-        if (py>y)!=(ny>y) and x < (nx-px)*(y-py)/(ny-py)+px:
-            hit=not hit
-        px,py=nx,ny
-    return hit
-
-
-def _closed(c,poly,ink):
-    for a,b in zip(poly,poly[1:]+poly[:1]):
-        c.line(*a,*b,ink)
+def _ease(t):
+    t=min(1.,max(0.,t))
+    return t*t*(3-2*t)
 
 
 def _city(c,t):
     w,h=c.w,c.h
-    travel=_smooth(t/3.9)
-    horizon=round(h*(.72+.03*travel))
-    # Two silhouettes with misaligned periods. Behind the foreground towers
-    # is a narrow vermilion side light, then the unpainted black of the sky.
-    for k in range(-1,w//9+3):
-        bw=5+(k*7)%11; j=k*9-round(10*travel)
-        y=horizon-round(h*(.31+.19*cos(k*1234)))
-        c.line(j,y,j+bw,y,'wine','_')
-        c.line(j,y,j,horizon,'wine','|')
-        c.line(j+bw,y,j+bw,horizon,'wine','|')
-        if k%3==0:
-            c.line(j+bw//2,y-3,j+bw//2,y,'wine','|')
-            c.put(j+bw//2,y-4,'+','rose')
-        for r in range(y+2,horizon,3):
-            if (r+k*7)%8:
-                c.put(j+2,r,'. '*max(1,(bw-2)//2),'wine')
-    for k in range(-2,w//8+4):
-        j=k*8+round(4*travel); bw=4+(k*11)%6
-        y=horizon-round(h*(.11+.11*cos(k*731)))
-        c.line(j,y,j+bw,y,'red','_')
-        for r in range(y+1,horizon+2):
-            strip='-' if (r+k)%7 else '#'
-            c.put(j,r,'|'+strip*(bw-1)+'|','dim' if (k+r)%4 else 'wine',opaque=True)
-            if r%3==1 and (r+k)%6!=1:
-                c.put(j+2,r,':','red')
-    # Foreshortened parapet and wet streaks below it.
-    c.line(0,horizon+1,w-1,horizon+3,'red','_')
-    c.line(0,horizon+2,w-1,horizon+4,'wine','-')
-    for k in range(max(12,w//3)):
-        x=(k*29+k*k*7+int(t*2)*(k%3+1))%w
-        y=horizon+4+(k*11) % max(1,h-horizon-4)
-        c.put(x,y,'..' if k%3 else '_-','wine' if k%3 else 'red')
-    for k in range(max(9,w//5)):
-        x=(k*19+k*k*5+int(t*4))%w
-        y=(k*13+k*k//3+int(t*2)*(1+k%2)) % max(1,horizon-3)
-        c.put(x,y,'.' if k%5 else '+','wine' if k%5 else 'red')
+    depth=.12*_ease(t/4.0)
+    horizon=h*.69
+    # Tokyo's stacked towers, antennae, lit window clusters and reflective ledge.
+    for layer in range(3):
+        step=w/(13+layer*.7)
+        offset=-w*(depth*(layer-1)+.04)
+        for i in range(-1,18):
+            x=offset+i*step
+            bw=step*(.72+.17*(i*3%5)/5)
+            roof=h*(.53+layer*.062-.085*((i*401+layer*53)%11)/11)
+            base=horizon+layer*h*.088
+            ink=('wine','wine','navy')[layer]
+            edge='wine' if layer!=1 else 'red'
+            c.face(((x,base),(x,roof+2),(x+bw*.18,roof+1),(x+bw*.22,roof),
+                    (x+bw*.61,roof),(x+bw*.66,roof-4),(x+bw*.83,roof-4),
+                    (x+bw*.83,roof),(x+bw,roof+3),(x+bw,base)),
+                   ink,2 if layer<2 else 4,edge)
+            if i%4==2:
+                cx=x+bw*.67
+                c.line((cx,roof-3),(cx,roof-11-layer),'wine' if layer==0 else 'rose')
+                c.put(round(cx),round(roof-12-layer),'rose')
+            for j in range(round(roof+5),round(base-2),5):
+                for k in range(1,4):
+                    q=x+bw*k/4
+                    if (i*23+j*17+k*11)%17 < (13 if layer==1 else 8):
+                        c.line((q,j),(q+1,j),
+                               'ochre' if (i*j+k)%16==0 else 'rose' if layer==1 else 'wine')
+    for k in range(3):
+        y=h*(.845+k*.020)
+        c.line((0,y),(w-1,y+h*.057),'red' if k==0 else 'wine')
+    for i in range(70):
+        x=(i*91+i*i*17+round(t*5*(i%3)))%max(1,w)
+        y=round(h*.88+(i*117)%max(1,round(h*.118)))
+        c.line((x,y),(x+1+i%6,y+2+i%2),'wine' if i%5 else 'red')
+    for i in range(76):
+        x=(i*79+i*i*17+round(t*3*(i%4)))%max(1,w)
+        y=(i*73+i*i*13)%max(1,round(h*.59))
+        c.put(x,y,'wine' if i%9 else 'rose')
 
 
-def _sheet(c,x,y,a,b,angle,kind,shade='white'):
-    # Use physical aspect when rotating: one character cell is taller than
-    # it is wide. Native rasterisation keeps edges sharp through the tumble.
+def _sheet(c, x, y, a, b, angle, *, front, edge='white'):
     co,si=cos(angle),sin(angle)
+
     def xy(u,v):
-        return (x+co*u*a-1.9*si*v*b,y+si*u*a/1.9+co*v*b)
-    edge=(xy(-1,-1),xy(1,-1),xy(1,1),xy(-1,1))
-    xs,ys=zip(*edge)
-    lo=max(0,int(min(xs))); hi=min(c.w-1,round(max(xs)))
-    for j in range(max(0,int(min(ys))),min(c.h-1,round(max(ys)))+1):
-        for i in range(lo,hi+1):
-            dx=i-x; dy=j-y
-            u=(co*dx+1.9*si*dy)/a; v=(-si*dx/1.9+co*dy)/b
-            if abs(u)>.999 or abs(v)>.999:
-                continue
-            if kind=='emblem':
-                # Use card-space geometry so rings and crest follow the
-                # tumble, squash edge-on, and stay inside the paper.
-                radius=hypot(u*1.31,(v+.02)*.91)
-                ring=int(radius*6.4)
-                mark=' ' if ring%2 else '#'
-                color='red' if radius<1.30 else 'wine'
-                mx=u*_EMBLEM_X+.045
-                my=(v-.025)*_EMBLEM_Y
-                if _inside(mx,my,_HAT):
-                    mark=' '
-                if _inside(mx,my,_BAND):
-                    mark,color=':','red'
-                if _inside(mx,my,_FLAME):
-                    mark,color='#','white'
-                if _inside(mx,my,_MASK):
-                    eye=_inside(mx,my,_LEFT_EYE) or _inside(mx,my,_RIGHT_EYE)
-                    mark,color=(' ','dim') if eye else ('#','white')
-                c.put(i,j,mark,color,opaque=True)
-                continue
-            # Plain inner paper at rest, brighter engraved border and a few
-            # diagonal fibres. No rows of letters that can read as a title.
-            closest=min((1-abs(u))*a,(1-abs(v))*b)
-            if closest<.52:
-                glyph='-'
-            elif closest<1.1:
-                glyph=':'
-            elif kind=='plain':
-                glyph='.' if (round(u*a)+round(v*b)*3)%7==1 else ' '
-            else:
-                glyph='.' if (round(u*a)-round(v*b)*3)%4 in (0,1) else ' '
-            c.put(i,j,glyph,shade,opaque=True)
-    _closed(c,edge,'red' if kind=='emblem' else shade)
-    # A red printed two-stroke bevel and the faint inner corner, never text.
-    for sx,sy in ((-1,1),(1,-1)):
-        aa=xy(sx*.91,sy*.83)
-        c.line(*aa,*xy(sx*.61,sy*.83),'red','.')
-        c.line(*aa,*xy(sx*.91,sy*.61),'red','.')
-    if kind=='emblem' and a>6 and b>3:
-        emblem=lambda poly: tuple(xy((mx-.045)/_EMBLEM_X,my/_EMBLEM_Y+.025) for mx,my in poly)
-        _closed(c,emblem(_HAT),'white')
-        _closed(c,emblem(_MASK),'white')
+        uu,vv=u*a,v*b
+        return x+co*uu-si*vv,y+si*uu+co*vv
+
+    def shape(points,ink,density=8,outline=None):
+        c.face(tuple(xy(u,v) for u,v in points),ink,density,outline)
+
+    # Slight skew is drawn into the paper itself, not stamped in terminal cells.
+    cover=((-1,-.94),(.94,-1),(1,-.89),(1,.92),(.91,1),(-1,.97))
+    shape(cover,'wine' if front else 'slate',7 if front else 3,
+          'rose' if front else edge)
+    inner=((-.94,-.89),(.9,-.94),(.94,.88),(.87,.94),(-.94,.91))
+    shape(inner,'red' if front else 'navy',6 if front else 3,'rose' if front else 'slate')
+    if a<=4 or b<=3:
+        return xy
+
+    if front:
+        # Foreshortened printed target rings. Keep them inside the paper's edge.
+        for rx,ry,pigment in ((.87,.88,'wine'),(.76,.78,'rose'),(.63,.68,'wine'),
+                              (.49,.53,'rose'),(.35,.36,'wine'),(.2,.2,'rose')):
+            c.path([xy(rx*cos(j*TAU/80),ry*sin(j*TAU/80)) for j in range(81)],pigment)
+        def logo(coords,ink,outline=None,density=8):
+            shape(tuple((u*.53,(v+.10)*.57) for u,v in coords),ink,density,outline)
+        logo(HAT,'wine','white',7)
+        logo(BAND,'red','rose',8)
+        logo(FLAME,'white','rose',8)
+        logo(MASK,'white','rose',8)
+        logo(LEFT_EYE,'navy',density=8)
+        logo(RIGHT_EYE,'navy',density=8)
+        for corner,side in zip(((-.83,-.81),(.81,.81)),(1,-1)):
+            u,v=corner
+            c.path(tuple(xy(i,j) for i,j in ((u+side*.17,v),(u,v),(u,v+side*.17))), 'white')
+    else:
+        # Quiet fold lines on the back. No text embedded in the animation.
+        for j in range(-4,5):
+            h=j*.17
+            c.line(xy(-.83,h),xy(.83,h-0.045),'navy')
+        c.path(tuple(xy(u,v) for u,v in ((-.89,.8),(0,-.14),(.89,.8))),'slate')
+        c.path(tuple(xy(u,v) for u,v in ((-.89,-.79),(0,.15),(.89,-.79))),'slate')
     return xy
 
 
-def _streak(c,t,x,y,w,h):
-    for k in range(max(8,w//7)):
-        s=(t*(.38+(k%4)*.08)+k*.097)%1
-        if s>.80:
-            continue
-        x1=round(x-w*(.29+.31*s)+(k*11)%17)
-        y1=round(y-h*(.20+.51*s)+k%5-2)
-        length=1+round((1-s)*(w*.06))
-        c.line(x1,y1,x1+length,y1+round(length*.16),'red' if k%4==0 else 'wine','-')
+def _motion(c,x,y,t):
+    for i in range(50):
+        f=(i*.053+t*(.21+(i%9)*.039))%1
+        if f>.83:continue
+        a=x-c.w*(.035+.61*f);b=y+c.h*(.022+.235*f)+(i%9-4)*2
+        n=(1-f)*(5+i%12)
+        c.line((a,b),(a+n,b-n*.29),'rose' if i%8==1 else 'red' if i%3==0 else 'wine')
 
 
-def _kick(c,w,h,x,y,t):
-    p=(t-2.39)/.58
-    if not 0<p<1:
+def _impact(c,x,y,t):
+    f=(t-2.39)/.65
+    if not 0<f<1:
         return
-    for k in range(22):
-        theta=pi*.08+pi*.84*k/21
-        r=(w*.03+w*.26*p)*(1+(k%3)*.19)
-        xx=x+cos(theta)*r
-        yy=y-sin(theta)*r*.36+round(h*.08*p)
-        c.put(round(xx),round(yy),('*','+','.')[(k+int(p*8))%3],('red','rose','white')[k%3])
+    for i in range(34):
+        a=pi*(1.0+i/34)
+        r=(9+f*c.w*.26)*(1+(i%6)*.088)
+        sx,sy=x+r*cos(a),y+r*.63*sin(a)
+        n=2+i%5
+        c.line((sx,sy),(sx+n*cos(a),sy+n*sin(a)),
+               'white' if i%8==0 else 'rose' if i%3 else 'red')
 
 
-def render(t,w,h):
-    """Return scene rows. This renderer never reads menus, saves or key state."""
+def _landing(c,menu):
+    reveal,top,left,span=menu
+    if reveal<=0:return
+    # The panel is the opened card's inner right-hand page, dark enough
+    # for the real title and keyboard choices the host adds after landing.
+    x,y=left*2,top*4
+    b=min(15*4,c.h-y-2)*reveal
+    a=span*2
+    drift=(1-reveal)*min(9,c.w//16)*2
+    shear=b*.12
+    points=((x+drift,y),(x+a+drift,y+1),
+            (x+a+drift-shear,y+b),(x+drift-shear,y+b))
+    c.face(points,'wine',density=1,edge='rose')
+    inner=((x+4+drift,y+3),(x+a-4+drift,y+3),
+           (x+a-4+drift-shear,y+b-3),(x+4+drift-shear,y+b-3))
+    if b>8:c.face(inner,'wine',density=0,edge='wine')
+    if reveal>=1:
+        for row in (c.h//4-4,c.h//4-2):
+            if row<0:continue
+            for micro in range(row*4,min(c.h,row*4+4)):
+                c.rows[micro]=[None]*c.w
+
+
+def render(t,w,h,*,menu=None):
+    """Return animated scene rows at the live viewport, never a rescaled cel."""
     t=max(0.,min(float(t),DURATION))
-    c=Canvas(w,h)
-    if not w or not h:
-        return c.finish()
+    c=DotCanvas(w,h)
+    if not w or not h:return c.finish()
     _city(c,t)
-    a=max(3.,w*.195); b=max(2.,h*.255)
+    width,height=c.w,c.h
+    a,b=width*.211,height*.265
     if t<2.39:
-        # Flights across both axes and flips edge-on twice, not a fixed-center
-        # dissolve. Each scale value is a projected polygon, not glyph zoom.
-        f=t/2.39; drift=1-(1-f)**1.6
-        x=w*(-.13+.73*drift)
-        y=h*(.04+.52*f-.10*sin(f*pi))
-        foreshorten=cos(f*4*pi)
-        scale=.57+.43*drift
-        angle=.84*(1-f)*sin(f*pi*4.1)+.25*(1-f)+.13
-        _streak(c,t,x,y,w,h)
-        _sheet(c,x,y,max(1.0,a*scale*abs(foreshorten)),b*scale,angle,
-               'emblem' if foreshorten>0 else 'plain','white' if foreshorten>0 else 'slate')
+        p=t/2.39
+        path=1-(1-p)**1.63
+        x=width*(-.105+.677*path)
+        y=height*(.05+.52*p-.087*sin(pi*p))
+        squash=cos(p*4*pi)
+        scale=.50+.50*path
+        _motion(c,x,y,t)
+        _sheet(c,x,y,max(1.0,a*scale*abs(squash)),b*scale,
+               .75*sin(p*4*pi)*(1-p)+.17,front=squash>0)
     elif t<3.08:
-        f=(t-2.39)/.69
-        # Paper skips once on landing and its downward corner hits the ledge.
-        x=w*(.60-.025*_smooth(f)); y=h*(.56+.025*f-.065*sin(f*pi*1.4)*(1-f))
-        _kick(c,w,h,x,y+b,t)
-        _sheet(c,x,y,a,b,.13-.055*_smooth(f),'emblem')
+        p=(t-2.39)/.69
+        x=width*(.572-.02*_ease(p));y=height*(.57+.037*p-.051*sin(pi*p)*(1-p))
+        _impact(c,x,y+b,t)
+        _sheet(c,x,y,a,b,.17-.11*_ease(p),front=True)
     else:
-        f=_smooth((t-3.08)/1.22)
-        angle=.075*(1-f)+.018*f
-        x=w*(.575+.122*f); y=h*.585
-        # The cover rolls left about its spine. Only the edge appears at 90°.
-        # The inside right page's spread is drawn first and stays exposed.
-        prog=cos(pi*f)
-        back=a*(1+.04*f)
-        hinge=x-back
-        _sheet(c,x,y,back,b+.15*f,angle,'plain','white')
-        open_a=max(.75,a*abs(prog))
-        if prog<0:
-            # A small curled inner edge creates a raised fold as it opens.
-            left=hinge-open_a
-            _sheet(c,left,y-.7*f,open_a,b+.35*f,-angle,'emblem','white')
+        f=_ease((t-3.08)/1.22)
+        hinge=width*(.552-.167*(1-f))
+        y=height*.607
+        thickness=cos(pi*f)
+        _sheet(c,hinge+a*.94,y,a*.98,b,.031,front=False,edge='slate')
+        if thickness>=0:
+            _sheet(c,hinge+a*max(.025,thickness),y-(1-f)*2,a*max(.025,thickness),
+                   b,.05*(1-f),front=True)
         else:
-            _sheet(c,hinge+open_a,y-.8*sin(pi*f),open_a,b,angle,'emblem','white')
-        if f>.45:
-            c.line(hinge,y-b+.5,hinge,y+b-.5,'slate','|')
-            c.put(round(hinge)-1,round(y+b),r'\/','red')
+            _sheet(c,hinge+a*thickness,y+f*1.2,max(.6,a*abs(thickness)),b,
+                   -.041,front=True)
+        if f>.38:
+            c.line((hinge,y-b),(hinge,y+b),'rose')
+    if menu is not None:
+        _landing(c,menu)
     return c.finish()

@@ -1,7 +1,7 @@
 """Offline Velvet Room combat rules. Scenario numbers are tuned for this simulation."""
 from dataclasses import dataclass,field
 import random, math
-from cutins import CutCue, ORACLE_SUPPORT, all_out as all_out_cut, showtime as showtime_cut
+from cutins import CutCue, FINAL_GUARD, ORACLE_SUPPORT, all_out as all_out_cut, showtime as showtime_cut
 from battle_data import SKILLS, TEAM, PERSONAS, ITEMS, ENEMIES, ENCOUNTERS
 import shadow_contract
 
@@ -16,6 +16,23 @@ TECH={
 AFF={'weak':1.5,'resist':.5,'normal':1,'null':0,'repel':0,'drain':0}
 STATS=('attack','defense','agility')
 STAT_TURNS=3
+@dataclass(frozen=True)
+class HitCause:
+ attacker:str
+ move:str
+ element:str
+ damage:int
+ weak:bool=False
+ defense_down:bool=False
+ bonus:bool=False
+
+@dataclass(frozen=True)
+class CombatFeedback:
+ target:'Unit'
+ resource:str=''
+ delta:int=0
+ tags:tuple[str,...]=()
+
 @dataclass(eq=False)
 class Unit:
  name:str
@@ -68,14 +85,17 @@ class Battle:
    self.allies[0].hp=self.allies[0].max_hp=205
    self.allies[0].sp=self.allies[0].max_sp=72
    self.items['Medicine']+=1
-  self.log=[];self.seen={};self.last_error=None;self.chain=0;self.one_more=False;self.passed=set()
-  self.damage_events=[]
+  self.log=[];self.seen={};self.stale_readings=set();self.last_error=None;self.chain=0;self.one_more=False;self.passed=set()
+  self.affinity_updates={};self._affinity_species={}
+  self._affinity_memory=self.config.get('affinity_memory',{})
+  self.damage_events=[];self.feedback=[]
+  self._joker_hit=None;self._joker_combo=None;self._enemy_bonus=False;self._bonus_opening=None
   self.reaper_turn=0;self._reaper_charge=None;self._reaper_last_phase=''
   config=self.config
   self.waves=config['waves']
   self.enemy_data=ENEMIES if enemy_data is None else enemy_data
   self._story_intent='';self._boss_state={}
-  self._support_used=False
+  self._support_used=False;self._final_guard_used=False
   # Presentation state is separate from damage, initiative and the save.
   self.cut_in=None;self.cut_in_queue=[];self._ufo_cut_seen=False
   if config.get('shuffle_count'):
@@ -120,6 +140,31 @@ class Battle:
  def _say(self,msg):
   self.log.append(msg)
   if len(self.log)>160:del self.log[:-160]
+ def defeat_diagnosis(self):
+  # Explain the recorded decisive hit, without revealing future affinities.
+  if self.phase!='loss':return ()
+  hit=self._joker_hit
+  if not hit:return ('Joker was knocked out.',)
+  opening=self._joker_combo
+  if opening and opening.attacker==hit.attacker and opening.move==hit.move and opening.weak and hit.weak:
+   detail=f"{hit.attacker} hit Joker’s {hit.element} weakness: {opening.damage}, then {hit.damage} (One More)."
+  elif hit.weak:
+   detail=f"{hit.attacker}’s {hit.move} hit Joker’s {hit.element} weakness ({hit.damage} DAMAGE)."
+   if hit.bonus:detail=f'One More: {detail}'
+  elif hit.attacker:
+   detail=f"{hit.attacker}’s {hit.move} knocked Joker out ({hit.damage} DAMAGE)."
+   if hit.bonus:detail=f'One More: {detail}'
+  elif hit.move:
+   detail=f'{hit.move} knocked Joker out ({hit.damage} DAMAGE).'
+  else:
+   detail='Joker was knocked out.'
+  return (detail,'Joker’s defense was already lowered.') if hit.defense_down else (detail,)
+ def loss_summary(self):
+  return ' '.join(self.defeat_diagnosis())
+ def invalidate_readings(self,unit):
+  self._affinity_species.pop(unit,None)
+  if self.seen.pop(unit.name,None):
+   self.stale_readings.add(unit)
  def upcoming_turns(self):
   """Scheduled movers after the current action, including across a round boundary."""
   if self.phase!='turn':return []
@@ -140,12 +185,17 @@ class Battle:
   return live
  def _spawn(self):
   names=self.waves[self.wave-1]; totals={n:names.count(n) for n in names};counts={}
-  self.enemies=[]
+  self.enemies=[];self.stale_readings.clear();self._affinity_species.clear()
   for n in names:
    counts[n]=counts.get(n,0)+1
    u=_unit(n,self.enemy_data[n],True)
    if totals[n]>1:u.name=f'{n} {chr(64+counts[n])}'
    self.enemies.append(u)
+   if self.config.get('remember_affinities') and not u.no_knockdown:
+    self._affinity_species[u]=n
+    known={**self._affinity_memory.get(n,{}),**self.affinity_updates.get(n,{})}
+    known={element:effect for element,effect in known.items() if u.affinity.get(element,'normal')==effect}
+    if known:self.seen.setdefault(u.name,{}).update(known)
   if self.story and self.config.get('party_size')==1:
    for u in self.enemies:u.hp=u.max_hp=max(1,round(u.max_hp*.72))
   if self.story and self.config.get('id','').startswith(('cruiser-','depths-','laboratory-')) and self.wave>1:
@@ -212,7 +262,7 @@ class Battle:
   if self.phase!='interlude' or not self.interlude:
    raise ValueError('There is no paused wave to resume.')
   self.interlude=None;self.phase='turn'
-  self.damage_events.clear();self.cut_in=None;self.cut_in_queue.clear()
+  self.damage_events.clear();self.feedback.clear();self.cut_in=None;self.cut_in_queue.clear()
   had_support=self._support_used
   self._next_wave()
   if self.phase=='turn':self._advance()
@@ -237,7 +287,7 @@ class Battle:
    if u.status:
     status=u.status
     if status=='burn':
-     d=self._hurt(u,max(1,u.max_hp//12));self._say(f'{u.name} takes {d} burn damage.')
+     d=self._hurt(u,max(1,u.max_hp//12),cause='Burn');self._say(f'{u.name} takes {d} burn damage.')
     if status=='sleep':
      heal=min(u.max_hp-u.hp,max(1,u.max_hp//12));u.hp+=heal;u.sp=min(u.max_sp,u.sp+3)
     u.status_turns-=1
@@ -253,13 +303,17 @@ class Battle:
     if pending is not None:pending.discard(u)
     self._offer_showtime()
     return
+   before=self._joker_hit
    bonus=self._enemy_step(u)
    if self._state():
     if self.phase!='turn':return
     continue
    if bonus and u.alive:
     self._say(f'{u.name} gets One More!')
-    self._enemy_step(u)
+    self._enemy_bonus=True
+    self._bonus_opening=self._joker_hit if self._joker_hit is not before else None
+    try:self._enemy_step(u)
+    finally:self._enemy_bonus=False;self._bonus_opening=None
     if self._state():
      if self.phase!='turn':return
      continue
@@ -322,9 +376,15 @@ class Battle:
   if id.startswith('skill:') and id[6:] not in skills:return 'That skill is not on the selected Persona.'
   if id.startswith('item:') and not self.items.get(id[5:],0):return f'No {id[5:]} left in the bag.'
   if id=='gun' and not a.ammo:return self.command_block('gun')
+  kind=s['kind'];mode=s['target'];candidates=self.targets(id)
+  if self.story and mode in ('enemy','enemies'):
+   from weekend_bosses import target_block
+   foes=([target] if target in candidates else candidates if mode=='enemy' else
+         [u for u in self.enemies if u.alive])
+   blocks=[target_block(self,u,s) for u in foes]
+   if blocks and all(blocks):return blocks[0]
   reason=self._cost_block(a,s)
   if reason:return reason
-  kind=s['kind'];mode=s['target'];candidates=self.targets(id)
   if mode in ('enemy','ally'):
    if not candidates:
     if kind=='revive':return 'No ally is knocked out. Use an HP heal for a living ally.'
@@ -373,18 +433,18 @@ class Battle:
    if self.story:
     from weekend_bosses import action_block
     if action_block(self,'baton'):return []
-   return [(f'pass:{t.name}',f'Pass to {t.name}','Give your extra action to an ally and boost damage.') for t in self._baton()] if self.one_more else []
+   return [(f'pass:{t.name}',f'Pass to {t.name}','The recipient acts now and keeps their scheduled turn.') for t in self._baton()] if self.one_more else []
   if cat=='persona':
    return [(f'persona:{n}',n,p.get('role','Change Joker’s skills and affinities.')) for n,p in self.personas.items() if n!=self.persona] if a.name=='Joker' and not self.shifted else []
   if cat=='items':
-   return [(f'item:{n}',f'{n} ×{count}',self._describe(SKILLS[ITEMS[n]['skill']])) for n,count in self.items.items() if count>0]
+   return [(f'item:{n}',f'{n} ×{count}',self._describe(SKILLS[ITEMS[n]['skill']],item=True)) for n,count in self.items.items()]
   if cat=='skills':
    names=self.personas[persona]['skills'] if a.name=='Joker' and not self.shifted and persona in self.personas else a.skills
    return [(f'skill:{n}',n,self._describe(SKILLS[n],a)) for n in names]
   return []
- def _describe(self,s,a=None):
+ def _describe(self,s,a=None,*,item=False):
   sp,hp=self._cash(a,s) if a else (0,0)
-  cost=f'{sp} SP' if sp else f'{s.get("hp",0)}% HP' if hp else 'No cost'
+  cost='Uses 1 item' if item else f'{sp} SP' if sp else f'{s.get("hp",0)}% HP' if hp else 'No cost'
   p=s.get('power',0);k=s['kind']; elem=s.get('element','')
   tp=('all enemies' if s['target']=='enemies' else 'all allies' if s['target']=='allies' else s['target'])
   label=(f'{elem} damage' if k=='damage' else f'{s.get("status","status").title()} ailment' if k=='ailment' else
@@ -399,7 +459,7 @@ class Battle:
   if self.cut_in is None:self.cut_in=cue
   else:self.cut_in_queue.append(cue)
  def act(self,id,target=None,*,persona=None):
-  self.damage_events.clear();self.cut_in=None;self.cut_in_queue.clear()
+  self.damage_events.clear();self.feedback.clear();self.cut_in=None;self.cut_in_queue.clear()
   supported=self._support_used
   error=self._act(id,target,persona)
   if not supported and self._support_used:self._queue_cutin(ORACLE_SUPPORT)
@@ -470,7 +530,7 @@ class Battle:
   if switching:self._equip_persona(persona)
   if id=='gun':a.ammo-=1
   if id.startswith('item:'):self.items[id[5:]]-=1
-  sp,hp=self._cash(a,s);a.sp-=sp;a.hp-=hp
+  self._pay(a,s)
   extra=self._execute(a,s,target,id.split(':',1)[-1])
   if self._state():
    if self.phase=='turn':self._advance()
@@ -480,12 +540,29 @@ class Battle:
    self._say('Hold Up! All-Out Attack available.' if self.hold_up else f'{a.name} gets One More!')
   else:self._advance()
   return None
- def _hurt(self,t,num):
+ def _pay(self,a,s):
+  sp,hp=self._cash(a,s);a.sp-=sp;a.hp-=hp
+  if sp:self.feedback.append(CombatFeedback(a,'SP',-sp))
+  if hp:self.feedback.append(CombatFeedback(a,'HP',-hp,('COST',)))
+ def _hurt(self,t,num,*,cause='',tags=()):
   before=t.hp
   d=max(0,int(num));t.hp=max(0,t.hp-d)
-  if t.hp<before:self.damage_events.append((t,before,t.hp))
+  if t.hp<before:
+   self.damage_events.append((t,before,t.hp))
+   result=tuple(tag for tag in tags if t.alive or tag!='DOWN')
+   self.feedback.append(CombatFeedback(t,'HP',t.hp-before,result+(() if t.alive else ('KO',))))
+   if t is self.allies[0]:
+    self._joker_hit=HitCause('',cause,'',d);self._joker_combo=None
   if not t.alive:t.down=False;t.status=''
   return d
+ def _try_final_guard(self,a,t,damage):
+  if (self.phase!='turn' or self._final_guard_used or not a.enemy or t.enemy or not t.alive
+      or damage<t.hp or 'guard' not in self.config.get('oracle_features',())):return False
+  self._final_guard_used=True
+  self._say(f'ORACLE / Final Guard blocks the lethal hit on {t.name}!')
+  self.feedback.append(CombatFeedback(t,tags=('FINAL GUARD',)))
+  self._queue_cutin(FINAL_GUARD,cast=tuple(u.name for u in self.allies if u.alive))
+  return True
  def _execute(self,a,s,target,name):
   if self.story and not a.enemy and target is not None and target.enemy and s['kind']=='damage':
    from weekend_bosses import intercept
@@ -496,15 +573,21 @@ class Battle:
   targets=[a] if mode=='self' else ([t for t in ours if t.alive] if mode=='allies' else [t for t in theirs if t.alive]) if mode in ('allies','enemies') else [target]
   self._say(f'{a.name} → {name.title() if name in ("attack","gun") else name}.')
   bonus=False
+  recovery=[]
   for t in targets:
    if t is None:continue
-   if kind=='damage':bonus=self._strike(a,t,s) or bonus
+   if kind=='damage':bonus=self._strike(a,t,s,name) or bonus
    elif kind=='heal':
-    old=t.hp;t.hp=min(t.max_hp,t.hp+int(s.get('power',0)*(1+.2*self.chain if not a.enemy else 1)));self._say(f'{t.name} recovers {t.hp-old} HP.')
+    old=t.hp;t.hp=min(t.max_hp,t.hp+int(s.get('power',0)*(1+.2*self.chain if not a.enemy else 1)))
+    if t.hp>old:
+     recovery.append((t.name,t.hp-old));self.feedback.append(CombatFeedback(t,'HP',t.hp-old))
    elif kind=='restore':
-    old=t.sp;t.sp=min(t.max_sp,t.sp+int(s.get('power',0)));self._say(f'{t.name} recovers {t.sp-old} SP.')
+    old=t.sp;t.sp=min(t.max_sp,t.sp+int(s.get('power',0)))
+    if t.sp>old:
+     recovery.append((t.name,t.sp-old));self.feedback.append(CombatFeedback(t,'SP',t.sp-old))
    elif kind=='revive':
     t.hp=max(1,min(t.max_hp,round(t.max_hp*int(s.get('power',50))/100)));t.down=False;self._say(f'{t.name} returns with {t.hp} HP.')
+    self.feedback.append(CombatFeedback(t,'HP',t.hp,('REVIVED',)))
    elif kind=='cure':
     self._say(f'{t.name} clears {t.status or "no ailment"}.');t.status='';t.status_turns=0
    elif kind in ('buff','debuff'):
@@ -524,6 +607,12 @@ class Battle:
     for key in removed:del t.buffs[key]
     self._say(f'{t.name}: '+('cleared '+', '.join(removed)+'.' if removed else 'no stat effects to clear.'))
    elif kind=='ailment':self._ail(t,s.get('status',''),s.get('chance',0.9))
+  if recovery:
+   stat='HP' if kind=='heal' else 'SP'
+   if len(recovery)==1:
+    who,gain=recovery[0];self._say(f'{who} recovers {gain} {stat}.')
+   else:
+    self._say(f'{stat} recovered: '+', '.join(f'{who} +{gain}' for who,gain in recovery)+'.')
   return bonus
  def _ail(self,t,status,chance):
   chance=chance/100 if chance>1 else chance
@@ -533,7 +622,7 @@ class Battle:
   if not t.status and self.rng.random()<chance:
    t.status=status;t.status_turns=2;self._say(f'{t.name} is afflicted with {status}.')
   else:self._say(f'{t.name} resisted {status}.')
- def _strike(self,a,t,s):
+ def _strike(self,a,t,s,name='Attack'):
   if self.story and not a.enemy and t.enemy:
    from weekend_bosses import block_hit
    if block_hit(self,t,s):return False
@@ -542,11 +631,16 @@ class Battle:
   accuracy=s.get('accuracy',96)
   accuracy-=8*t.buffs.get('agility',(0,0))[0];accuracy+=8*a.buffs.get('agility',(0,0))[0]
   if a.status=='dizzy':accuracy-=18
-  if self.rng.randrange(100)>=accuracy:self._say(f'{t.name} dodged.');return False
+  if self.rng.randrange(100)>=accuracy:
+   self._say(f'{t.name} dodged.');self.feedback.append(CombatFeedback(t,tags=('MISS',)));return False
   marked=t.status in TECH and e in TECH[t.status]
   # Physical hits shatter frozen targets' ordinary physical defenses.
   frozen_override=t.status=='freeze' and e in ('Physical','Gun')
-  if not a.enemy and t.enemy and not frozen_override:self.seen.setdefault(t.name,{})[e]=f
+  if not a.enemy and t.enemy and not frozen_override:
+   self.seen.setdefault(t.name,{})[e]=f
+   if (species:=self._affinity_species.get(t)) is not None and t.affinity==self.enemy_data[species].get('affinity',{}):
+    self.affinity_updates.setdefault(species,{})[e]=f
+   self.stale_readings.discard(t)
   if frozen_override and f in ('null','repel','drain','resist'):f='normal'
   crit=e in ('Physical','Gun') and f not in ('null','repel','drain','resist') and self.rng.randrange(100)<s.get('crit',14)
   amount=s['power']*self.rng.uniform(.91,1.09)
@@ -557,24 +651,35 @@ class Battle:
   if self.difficulty=='Merciless' and (f=='weak' or marked or crit):amount*=2.0
   if not a.enemy and self.chain:amount*=1+.2*self.chain
   if f in ('null','repel','drain'):
-   if f=='repel':self._hurt(a,max(1,round(amount)));self._say(f'{t.name} repels {e}!')
-   elif f=='drain':t.hp=min(t.max_hp,t.hp+max(1,round(amount)));self._say(f'{t.name} drains {e}!')
-   else:self._say(f'{t.name} blocks {e}.')
+   if f=='repel':
+    self._hurt(a,max(1,round(amount)),cause=f'Reflected {e}',tags=('REPEL',));self._say(f'{t.name} repels {e}!')
+    self.feedback.append(CombatFeedback(t,tags=('REPEL',)))
+   elif f=='drain':
+    old=t.hp;t.hp=min(t.max_hp,t.hp+max(1,round(amount)));self._say(f'{t.name} drains {e}!')
+    self.feedback.append(CombatFeedback(t,'HP',t.hp-old,('DRAIN',)))
+   else:self._say(f'{t.name} blocks {e}.');self.feedback.append(CombatFeedback(t,tags=('NULL',)))
    return False
   amount*=AFF.get(f,1)
   if marked:amount*=1.42
   if crit:amount*=1.45
   if t.guard:amount*=.48
   was_down=t.down
-  dmg=self._hurt(t,max(1,round(amount)))
+  down=(f=='weak' or crit or marked) and not t.guard and not t.no_knockdown and not was_down
   tags=[name for cond,name in [(f=='weak','WEAK'),(f=='resist','RESIST'),(crit,'CRITICAL'),(marked,'TECHNICAL'),(t.guard,'GUARD')] if cond]
+  damage=max(1,round(amount))
+  if self._try_final_guard(a,t,damage):return False
+  dmg=self._hurt(t,damage,tags=(*tags,*(('DOWN',) if down else ())))
+  if t is self.allies[0]:
+   self._joker_hit=HitCause(a.name,name.title() if name in ('attack','gun') else name,e,dmg,f=='weak',
+                            t.buffs.get('defense',(0,0))[0]<0,self._enemy_bonus)
+   self._joker_combo=self._bonus_opening
   self._say(f'{t.name} takes {dmg} damage'+(' ['+' · '.join(tags)+']' if tags else '')+('.' if t.alive else ' — down for the count!'))
   if t.status in ('freeze','sleep') and marked:t.status='';t.status_turns=0
   if s.get('status'):self._ail(t,s['status'],s.get('chance',.24))
   # A weakness KO counts only if the target was standing before the hit.
   # _hurt clears Down on KO, so test the pre-hit state.
   if not t.alive:return f=='weak' and not was_down
-  if (f=='weak' or crit or marked) and not t.guard and not t.no_knockdown and not was_down:
+  if down:
    t.down=True
    return True
   return False
@@ -686,5 +791,5 @@ class Battle:
       if score:options.append((35+min(37,score),name,s,t))
   if not options:return False
   _,name,s,t=max(options,key=lambda x:x[0]+self.rng.uniform(-20,20))
-  sp,hp=self._cash(a,s);a.sp-=sp;a.hp-=hp
+  self._pay(a,s)
   return self._execute(a,s,t,name)

@@ -179,7 +179,7 @@ def _azathoth(b, a):
         revived = []
         for u in arms:
             u.affinity = dict(AFFINITIES[(TENDRILS.index(u.behavior) + 1) % len(TENDRILS)])
-            b.seen.pop(u.name, None)
+            b.invalidate_readings(u)
             if not u.alive:
                 u.hp = max(1, u.max_hp // 2)
                 u.down = u.guard = False

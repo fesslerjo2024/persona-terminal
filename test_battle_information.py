@@ -63,7 +63,7 @@ class InformationAudit(unittest.TestCase):
             screen = ui.render()
             self.assertEqual(screen.count('W Weak'), 1)
             self.assertIn('P Repel D Drain', screen)
-            self.assertEqual(ui.last_footer, 'ESC BACK')
+            self.assertEqual(ui.last_footer, 'E ELEMENTS  ESC BACK')
             ui.battle_key(ESC)
 
             ui.battle_key('1')

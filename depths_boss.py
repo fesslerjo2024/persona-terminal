@@ -5,10 +5,13 @@ https://www.youtube.com/watch?v=iiIddrIYekE (arm and sin order),
 https://www.youtube.com/watch?v=gyk5nw5C0Q4 (1:08 Grail, 13:34 body, 56:59 Satanael).
 Royal extracted script references: battle/event/script/0313.bf, 0314.bf, 0311.bf.
 Numbers, action economy, sin effects, and recovery are condensed adaptations.
-The earlier scripted defeat in the Depths is intentionally unaffected.
+The first encounter is a short survival objective. The later Grail still
+requires severing its lines and winning through damage.
 """
 from battle_data import SKILLS, shadow
+from satanael_scene import TITLE as SATANAEL_CUT
 
+FIRST_GRAIL = 'depths-grail-first'
 GRAIL = 'depths-grail-unbound'
 BODY = 'depths-yaldabaoth'
 ARM = 'depths-yaldabaoth-arm'
@@ -16,6 +19,7 @@ ARM_NAMES = ('Gun of Execution','Bell of Declaration','Sword of Conviction',
              'Book of Commandments')
 # The source boss has special ailments, not these simulator affinity/HP values.
 ENEMY_ADDITIONS = {
+    'Holy Grail First Encounter': shadow(650,80,[],{},FIRST_GRAIL,no_knockdown=True),
     'Holy Grail Unbound': shadow(565,80,[],{},GRAIL,no_knockdown=True),
     'Yaldabaoth': shadow(880,80,[],{},BODY,no_knockdown=True),
     **{name:shadow(hp,0,[],{},ARM,no_knockdown=True)
@@ -47,6 +51,9 @@ def _restore(u,hp):
 def on_spawn(b):
     """Call once after the wave roster, initiatives and boss state are built."""
     st=b._boss_state
+    if _enemy(b,FIRST_GRAIL):
+        st['first_grail_turn']=0
+        b._say('Survive the Grail. Prisoner support keeps it from falling.')
     if _enemy(b,GRAIL):
         st.update(lines_open=False,lines_cut=False,grail_turn=0)
         b._say('The Grail feeds on the prisoners. Watch for a chance to sever its lines.')
@@ -65,6 +72,9 @@ def hidden_enemies(b):
 def before_state(b):
     """Call after Joker loss check and before ordinary wave/victory checks."""
     st=b._boss_state
+    first=_enemy(b,FIRST_GRAIL)
+    if first is not None and not first.alive:
+        _feed_first_grail(b,first)
     grail=_enemy(b,GRAIL)
     if grail is not None and not grail.alive and not st.get('lines_cut'):
         _restore(grail,max(1,grail.max_hp//4))
@@ -77,17 +87,21 @@ def before_state(b):
     st['finisher_ready']=True
     st.pop('apex_round',None); st.pop('return_round',None)
     for arm in st.get('arms',{}).values(): arm.hp=0
-    b._say('Rays of Control strikes. The public rallies, and Joker calls Satanael.')
-    b._say('Use Sinful Shell to end the fight.')
+    b._say('Over the radio: “Phantom Thieves!” The chant spreads across the city.')
+    b._say('Satanael takes shape behind Joker. Use Sinful Shell.')
 
 def intent(b):
     st=b._boss_state
+    if _enemy(b,FIRST_GRAIL):
+        if 'pending' in st:return 'ETERNAL LIGHT incoming. Guard to survive.'
+        if st.get('first_grail_turn',0):return 'SURVIVE / Recover before the Grail charges.'
+        return 'SURVIVE / The Grail feeds on the prisoners.'
     if _enemy(b,GRAIL):
         if st.get('lines_cut'): return 'LINES CUT / The Grail is vulnerable.'
         if st.get('lines_open'): return '9: Cut Supply Lines to stop the healing.'
         return 'WILL OF THE PEOPLE / Healing lines intact.'
     if not _enemy(b,BODY): return ''
-    if st.get('finisher_ready'): return 'SATANAEL / Joker can fire Sinful Shell.'
+    if st.get('finisher_ready'): return 'THE CITY CHEERS / Satanael answers. Use Sinful Shell.'
     if 'apex_round' in st: return 'DIVINE APEX / Suppress arms or Guard.'
     if 'return_round' in st: return 'ARM RETURN / One revival only.'
     n=sum(u.alive for u in st.get('arms',{}).values())
@@ -119,6 +133,7 @@ def use_special(b):
     else:
         st['finisher_ready']=False;st['finished']=True
         body=_enemy(b,BODY)
+        b._queue_cutin((SATANAEL_CUT,''),finishing=True,cast=('Joker',),targets=1)
         b._hurt(body,body.hp)
         b._say('Satanael fires Sinful Shell. Yaldabaoth falls.')
     b._state()
@@ -169,8 +184,37 @@ def _arm_step(b,a):
         b._execute(a,SKILLS['Rakunda'],target,'Distorted Wrath')
     return False
 
+def _feed_first_grail(b,grail):
+    restored=grail.max_hp-grail.hp
+    grail.hp=grail.max_hp
+    if restored:
+        b._say(f'Will of the People restores {restored} HP to the Grail.')
+
+
+def _first_grail_step(b,a,st):
+    _feed_first_grail(b,a)
+    if 'pending' in st:
+        if any(ally.alive for ally in st['pending']):
+            return False
+        del st['pending']
+        _attack(b,a,'Eternal Light',71,group=True)
+        if b.allies[0].alive:
+            b._finish_slot()
+            b.phase='win'
+            b._say('The Thieves survive Eternal Light. The Grail has not fallen.')
+        return False
+    st['first_grail_turn']+=1
+    if st['first_grail_turn']==1:
+        return _attack(b,a,'Arrow of Light',26,group=True)
+    st['pending']=set(_live(b))
+    b._say('The Grail charges Eternal Light. Guard every standing ally.')
+    return False
+
+
 def enemy_step(b,a):
     st=b._boss_state
+    if a.behavior==FIRST_GRAIL:
+        return _first_grail_step(b,a,st)
     if a.behavior==GRAIL:
         st['grail_turn']+=1
         if not st['lines_open']:

@@ -1,6 +1,7 @@
 """Verify selector controls, battle-floor cues and guided fusion at compact sizes."""
 import curses as C
 from pathlib import Path
+from types import SimpleNamespace
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
@@ -25,15 +26,25 @@ class ReadabilityTests(TestCase):
         return '\n'.join(row[2] for row in self.rows)
 
     def test_horizontal_shuffle_wraps_and_only_enter_claims_selected_card(self):
-        app=self.app;app.hall=Hall(0);app.hall.defeated=True
-        app.go('shuffle')
+        app=self.app
+        from persona3_state import TUTORIAL
+        app.store.commit(phase='tartarus',day=TUTORIAL)
+        app.hall=Hall(0)
+        app.resources=app.caps=START_RESOURCES
+        app.battle=SimpleNamespace(resources=dict(START_RESOURCES),inventory={})
+        app._finish_hall_battle()
+        self.assertEqual(app.page,'shuffle')
+        yen=app.record.yen
         before=self.path.read_bytes()
         app.draw()
         self.assertIn('←→ SELECT  ENTER CLAIM',self.text())
         self.assertIn('Pixie',self.text())
         self.assertIn('¥90',self.text())
         self.assertIn('+30 HP / +12 SP',self.text())
-        self.assertTrue(any('◈' in text for _,_,text,_ in self.rows))
+        for low,high in ((5,22),(24,40),(42,60)):
+            masks={ch for y,x,text,_ in self.rows if 8<=y<=14 and low<=x<high
+                   for ch in text if 0x2801<=ord(ch)<0x28ff}
+            self.assertGreater(len(masks),10)
         app.key(C.KEY_UP)
         self.assertEqual(app.i,0)
         app.key(C.KEY_LEFT)
@@ -43,7 +54,7 @@ class ReadabilityTests(TestCase):
         app.key(C.KEY_RIGHT)
         self.assertEqual(self.path.read_bytes(),before)
         app.key('\n')
-        self.assertEqual((app.page,app.record.yen,app.record.masks),('hall',140,('Orpheus',)))
+        self.assertEqual((app.page,app.record.yen,app.record.masks),('hall',yen+90,('Orpheus',)))
 
     def test_gate_warning_is_persistent_but_fog_does_not_reveal_patrol(self):
         app=self.app;app.hall=Hall(1)
@@ -92,38 +103,87 @@ class ReadabilityTests(TestCase):
             self.assertTrue(all(0<=y<h-1 and 0<=x<=x+len(t)<w for y,x,t,_ in self.rows))
         self.assertEqual(self.path.read_bytes(),before)
 
-    def test_fusion_review_cancel_debit_and_explicit_equip(self):
+    def test_fusion_review_cancel_consumption_and_resummon(self):
         app=self.app;app.store.commit(masks=('Orpheus','Pixie'),yen=150)
-        app.open_velvet('evening')
+        app.open_velvet('evening');app.key(' ')
         app.key('f');app.draw()
         self.assertIn('READY',self.text());self.assertIn('MISSING PARENTS',self.text())
-        self.assertIn('✓ Orpheus',self.text());self.assertIn('✓ Pixie',self.text())
-        self.assertIn('¥110  /  ¥40 after',self.text())
+        self.assertIn('Orpheus + Pixie',self.text())
         self.assertIn('Skills: Agi',self.text());self.assertIn('Defense: Ice weak',self.text())
         before=self.path.read_bytes()
         app.key('2')
         self.assertEqual(app.page,'fusion')
-        self.assertIn('Register Angel first.',app.notice)
+        self.assertIn('Need Angel in stock.',app.notice)
         app.key('1')
+        self.assertEqual(app.page,'inherit')
+        moves=app._inherit_rows()
+        bash=next(i for i,(_,skill) in enumerate(moves,1) if skill=='Bash')
+        app.key(str(bash))
         self.rows.clear();app.draw()
-        self.assertIn('Both parents stay registered.',self.text())
-        self.assertIn('Orpheus stays equipped.',self.text())
-        self.assertIn('Pay ¥110   /   ¥150 → ¥40',self.text())
+        self.assertIn('Parents leave stock, but stay registered.',self.text())
+        self.assertIn('Inherit: Bash',self.text())
+        self.assertIn('No yen cost.',self.text())
         app.key(ESC)
         self.assertEqual(self.path.read_bytes(),before)
-        app.key('1');app.key('\n')
+        app.key('\n');app.key('\n')
         self.assertEqual((app.record.yen,app.record.masks,app.record.equipped),
-                         (40,('Orpheus','Pixie','Nekomata'),'Orpheus'))
-        self.assertEqual(app.record.masks[app.i],'Nekomata')
-        app.key('\n')
+                         (150,('Nekomata',),'Nekomata'))
+        self.assertEqual(tuple(app.record.compendium),('Orpheus','Pixie','Nekomata'))
+        app.key('c');app.key('r');self.assertEqual(app.page,'resummon')
+        post_fuse=self.path.read_bytes()
+        app.key(ESC)
+        self.assertEqual(self.path.read_bytes(),post_fuse)
+        app.key('r');app.key('\n')
+        self.assertEqual(app.record.masks,('Nekomata','Orpheus'))
         self.assertEqual(app.record.equipped,'Nekomata')
-        self.assertEqual(P3Store(self.path).state.yen,40)
+        self.assertEqual(P3Store(self.path).state.yen,105)
 
     def test_all_registered_compact_list_explains_nothing_is_left(self):
         app=self.app
         app.store.commit(masks=('Orpheus','Nekomata','Apsaras',"Jack O'Lantern"))
-        app.open_velvet('evening');app.key('f');app.draw()
-        self.assertIn('All recipes registered',self.text())
+        app.open_velvet('evening');app.key(' ');app.key('f');app.draw()
+        self.assertIn('No recipe ready.',self.text())
         self.assertNotIn('ENTER REVIEW',self.text())
         self.assertNotIn('MISSING PARENTS',self.text())
         self.assertTrue(all(0<=y<24 and 0<=x<=x+len(t)<=64 for y,x,t,_ in self.rows))
+
+    def test_long_event_date_and_entrance_shortcuts_fit_compact(self):
+        from persona3_upper import OPENS
+        from persona3_yabbashah import AFTER_AUGUST, AIGIS
+        a=self.app
+        a.store.commit(day=AFTER_AUGUST,phase='calendar')
+        a.go('evening');a.draw()
+        self.assertIn('08/08',self.text())
+        self.assertTrue(all(x+len(t)<=64 for _,x,t,_ in self.rows))
+        for day,shortcut in ((OPENS.replace(day=19),'R CASES'),(AIGIS,'C CLOCK')):
+            a.store.commit(day=day,phase='calendar')
+            a.deploy();a.key(' ')
+            self.rows.clear();a.draw()
+            footer=[t for y,x,t,_ in self.rows if y==23][0]
+            self.assertIn(shortcut,footer)
+            self.assertLessEqual(len(footer),64)
+
+    def test_junpei_choices_are_dated_and_hospital_scene_does_not_repeat(self):
+        from persona3_junpei import INVITATION, FIRST_SHOP_DAY, PAYOFF_DAY
+        a=self.app
+        a.store.commit(day=INVITATION,phase='calendar',yen=400)
+        a.resume()
+        a.draw()
+        self.assertIn('Talk with Junpei',self.text())
+        self.assertNotIn('Hospital',self.text())
+        a.key('5');a.key('4');a.key('\n')
+        self.assertEqual(a.record.day,FIRST_SHOP_DAY)
+        a.key('5')
+        self.assertEqual(a.record.yen,150)
+        self.assertEqual(a.page,'evening')
+        self.assertIn('Give Junpei the flowers',a.evening_options())
+        a.key('6')
+        self.assertEqual(a.record.junpei_flowers,'given')
+        a.store.commit(day=PAYOFF_DAY,activity='')
+        a.resume()
+        self.rows.clear();a.draw()
+        self.assertIn('HOSPITAL VISIT',self.text())
+        a.key('\n')
+        self.assertEqual((a.page,a.record.junpei_flowers),('calendar','seen'))
+        a.resume()
+        self.assertEqual(a.page,'calendar')

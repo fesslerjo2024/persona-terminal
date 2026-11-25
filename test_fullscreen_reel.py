@@ -34,7 +34,7 @@ class FullScreenTests(unittest.TestCase):
                         self.assertEqual(len(art),h)
                         self.assertTrue(all(len(row)==w for row in art))
                         full='\n'.join(art)
-                        self.assertTrue(full.isascii())
+                        self.assertGreater(sum('⠁'<=ch<='⣿' for ch in full),w)
                         self.assertIsNone(re.search(r'[A-Za-z]{3,}',full),full)
                         made.append(art)
                     self.assertGreaterEqual(len({tuple(art) for art in made}),5)

@@ -1,6 +1,6 @@
 # Persona 5 Terminal
 
-An offline Persona terminal suite with a Persona 3 spring chapter and the Persona 5 campaign. See [Information Baseline](INFORMATION_BASELINE.md) for screen, data, and file naming rules.
+An offline Persona terminal suite with the Persona 3 base-game story and the Persona 5 campaign. See [Information Baseline](INFORMATION_BASELINE.md) for screen, data, and file naming rules.
 
 Run from the extracted directory with Python and a curses terminal:
 
@@ -8,15 +8,15 @@ Run from the extracted directory with Python and a curses terminal:
 
 The minimum terminal size is 65×25. The default save is campaign-save.json.
 Pass --save with an explicit filename for a separate playthrough or to open
-an older save. Launching never renames or imports saves. The Testing Mode opens every populated
-chapter and uses only temporary in-memory state. The source archive contains
+an older save. Launching never renames or imports saves. Battle Practice opens
+populated Persona 5 chapters and uses only temporary in-memory state. The source archive contains
 no player save, passwords, or private workspace files.
 
 The launch picker offers Persona 3, Persona 4, and Persona 5. Use the arrow
 keys and Enter, press 3–5, or click a card in mouse-enabled terminals.
-The Dark Hour Clock, Tube TV, and Tumbling Card animate when highlighted
+The Dark Hour Clock, Golden Tube TV, and Pinned Calling Card animate when highlighted
 or activated.
-Persona 3 has a playable spring chapter. It uses `persona3-save.json`;
+Persona 3 is playable from April 6 through March 5. It uses `persona3-save.json`;
 `--p3-save PATH` gives it another slot. Persona 3 and Persona 5 cannot use
 the same save. Esc from a title returns to the picker.
 Persona 4 is unavailable. Persona 5 runs the original Calling Card intro and
@@ -24,27 +24,112 @@ working campaign. Esc at its title returns to the picker. Use
 `python3 campaign.py --persona5` to bypass the picker, including in existing
 automation. Enter, Space, or Esc skips an intro without selecting anything.
 
-## Persona 3: April to the first full moon
+## Persona 3: April to Graduation
 
 Start at Iwatodai, awaken Orpheus on the dorm rooftop, and deploy with Yukari
 and Junpei on April 20. Later afternoons give you a choice of study, training,
 or time in the dorm; evenings let you explore, prepare Personas, or rest.
+The calendar marks full moons, rescue cases, events and free days. The
+evening briefing shows the next event and the next actual full moon.
+Story scenes use the same arrow keys and Enter as the calendar. When a scene
+offers something to inspect, that choice gives context, not a stat reward or
+a hidden requirement for the ending. Continue reopens an unfinished scene
+from its first beat without replaying the fight that led to it.
 
-Thebel uses five representative floors and stops at the sealed 22F border.
-The entrance teleporter revisits accessed floors or continues the ascent.
+Thebel uses five representative floors and stops at 22F until May 10.
+Lower Arqa then opens with 23F and four gatekeepers on 28F, 35F, 36F and
+42F before the 43F border. Use Left/Right at the Tartarus entrance to choose
+the block. A warp is skippable with Enter, Space, or Esc. The entrance
+teleporter revisits accessed floors or continues the ascent.
+The elevator shows the selected block, gatekeeper or revisit, and supplies.
 Use **T** on a floor to return to the entrance during the same night, and
 **X** to end the expedition. The entrance can also resume your exact place.
 Patrols move with your steps; revisiting brings back ordinary Shadows, not
-cleared gatekeepers. Travel retains HP, SP and items. Story checkpoints are
-permanent; repeat patrols offer smaller Shuffle Time coin rewards and do not
-duplicate Persona registrations. Practice from the May 9 briefing or the
-epilogue retains no rewards or progress. The Velvet Room uses compact terminal recipes and keeps
-both parent entries. Equip a Persona from the compendium before battle.
+cleared gatekeepers. Travel retains HP, SP and items. **H** opens recovery outside of battle:
+use Medicine, Soul Drops, Revival Beads, field kits, or spend SP on
+healing skills. At the Tartarus entrance, **V** opens the Velvet Room
+without ending the expedition. Its entrance animation plays each visit;
+Enter, Space, or Esc skips it. Story checkpoints are
+permanent. First clears and repeat patrols award XP, with smaller repeat
+rewards, and levels unlock moves and increase HP/SP. In Makoto's Skills menu,
+preview your active Personas with Left/Right and equip with **P**, or cast a
+skill from the preview. Makoto can switch once per normal turn.
 
-May 9 opens the monorail whether or not you finish Thebel. The train timer
-counts committed combat actions, not real seconds. A failure returns to
-pre-board preparation on the same date. This is a Reload-inspired early slice,
-not a full recreation of every day, floor, or Persona system.
+The Velvet Room's compact recipes consume each parent from active stock and
+leave its entry registered. Choose up to one inherited skill. Fusion is free;
+use **C** and **R** in the Compendium to review a paid resummon. A fused
+result replaces the equipped mask only when that mask was a parent. Existing
+Persona 3 saves load without losing dates, progress, or Personas.
+
+From the calendar or evening menu, choose **Wait for next event** to review
+and confirm a skip over quiet days, even if Thebel is unfinished. The
+evening menu names its destination. An unfinished first survey remains
+available on 2F. No activities or bonus XP are awarded for skipped days.
+On May 9, walk through the train cars and regroup with Junpei before
+the Priestess fight. The timer counts committed combat actions, not
+real seconds. Pull the brake after winning. A loss returns to the same pre-board
+briefing. Already finished May 9 in an earlier build? **Continue** starts
+May 10 without resetting levels, Personas or Thebel checkpoints.
+
+Akihiko joins expeditions on May 23. On June 8, follow the clues to Fuuka,
+then fight Emperor and Empress. Their affinities can change; use Fuuka's
+Full Analysis to find the current opening. No Tartarus checkpoint is
+required for a full-moon operation. June 13 opens Theurgy, Mitsuru's
+deployment and Upper Arqa. Before the first expedition with Theurgy, you
+can read the short briefing and deploy, or try the optional drill. The
+drill gives no rewards and stays available to replay.
+Ordinary stat buffs and debuffs last three turns of the affected unit.
+**I** (Field Status) and Analyze show remaining turns.
+
+Upper Arqa spans representative floors from 44F to the 69F border.
+Elizabeth posts missing-person cases on June 18 and June 26. Use **R** at
+the entrance or in the calendar to see open cases; on the correct floor,
+move near the survivor and press **R**. July 6 is the last night to help.
+Fast-forward pauses on each new report date. After the final report, waiting
+for July 7 warns you that open cases will expire.
+
+At the hotel, Makoto and Yukari are locked for this operation only. Use
+**Enter** to toggle the other squadmates and **S** to deploy. Outside the
+hotel, Makoto is the only locked slot. The second hotel fight uses the
+same team, HP, SP, items and Theurgy charge. **H** opens
+recovery between fights. Search rooms across both floors; **I** describes
+the selected mirror if the reflection is hard to read. A defeat returns to the briefing; the operation
+is saved only after both Shadows are defeated.
+
+Lower Yabbashah opens July 18. Its 80F Monad Door is a fixed optional sample
+of Reload's roaming Doors. The 91F Passage and 117F Passage are repeatable
+attempts until cleared, with HP, SP, charge, and items carried between their
+fights. Open an available Monad challenge with **G**. The entrance's
+Recovery Clock (**C**) trades seven Twilight Fragments for full HP and SP.
+Aigis joins after Yakushima on July 24, with Orgia Mode and squad buffs.
+
+On August 6 the armored Shadow splits into Chariot and Justice. Defeat
+both halves before the survivor can act and revive its partner. Upper
+Yabbashah and Koromaru, including Hound of Hades, become available August 8.
+Read the 99F, 105F, and 112F threats for Poison, Fear, and Electric attacks.
+At Club Escapade on September 5, damage can interrupt Hermit's Mega and
+Giga Sparks. Defeat it before Tera Spark or Guard for the discharge.
+Continue from September 6 to both halves of Tziah, Fortune and Strength,
+the November bridge operation, and Chidori. Ken and Shinjiro arrive on
+their own dates; the October operation has the Reload roster restrictions.
+The Velvet Room adds new recipes as Tartarus opens. Optional calendar
+scenes appear on the dates they are available.
+
+Upper Harabah's two-stage **225F Monad Passage** becomes available after
+its gatekeeper. On December 31, Ryoji's decision branches into an alternate
+graduation or opens Adamah and the January route. On January 31, the
+summit opens at **257F**. At **258F**, fight the patrol for extra supplies
+or keep climbing. The summit readies your squad without forcing you
+to grind. Checkpoints are **259F Jin**, **263F Takaya**, and **264F Nyx**.
+Victory saves that checkpoint. In the same session, keep HP/SP and supplies
+or choose **R** to restock before the next fight. Nyx has all **14 Arcana**,
+then Makoto faces the **Great Seal** sequence alone. Both routes include their
+March endings and post-credits scenes.
+
+Practice from a boss briefing does not save rewards or Velvet Room changes.
+This adapts the base game's main story with representative floors, condensed
+scenes, and its own combat pacing. Episode Aigis is a separate expansion
+and isn't included.
 
 ## Campaign
 
@@ -53,16 +138,34 @@ Casino, Cruiser, Depths/Mementos, and Laboratory. Route names and original
 briefings are based on the game; enemy numbers, waves, and combat pacing are
 terminal adaptations. Only discovered weaknesses are highlighted.
 
-The Bank dials are playable in Story. Signature scripted mechanics include
+In Story mode, examine the two Bank vault receipts to work out the first
+PIN, or use the on-screen hint if you get stuck. Signature scripted mechanics include
 Kamoshida's Trophy and charge, Piggytron's charge and one-use bait, Kaneshiro's
 bodyguard and dwindling cash, Wakaba's aerial phase and ballista, and the
 Spaceport robot shifts and charged attacks. Sae’s Casino now has a playable
 Members Floor route and House of Darkness. Later features include the
-Grail's supply line, Yaldabaoth’s targetable arms and Satanael finish, and
+first Grail encounter (survive, rather than deplete its HP), the later supply
+line, Yaldabaoth’s targetable arms and Satanael finish, and
 the Laboratory’s role-based tendrils and coordinated Guard into Joker’s
 final strike. Remaining route puzzles may be compressed into story. See
 the chapter modules for research and adaptation notes. January opens after
 December in this fight-only app, without the original social prerequisites.
+
+New Game opens with the November casino escape, arrest, and Sae’s questioning.
+The April flashback starts with the first trip to Shujin and a short fight in
+the escape from the cells. The full Field Drill is available from the Palace
+map instead of interrupting that escape. Continue resumes an
+unfinished opening at its last completed step. Main-route introductions give
+the reason for each target before deployment. Essential first-clear scenes
+stay pending if you leave the debrief; Continue opens the scene without
+replaying the fight. The casino capture and reversal can also be revisited
+from the cleared *Leviathan and the Escape* briefing.
+At the Spaceport press console, choose a break that gives the crew enough
+time to cross. The console does not start a real-time countdown.
+In the Pyramid, examining both mural fragments enables **C Review Clue**
+in the relevant briefings; skipping them does not block the Palace.
+The Laboratory finale includes Maruki’s offer and a separate coda.
+
 
 ### Palace menus
 Controls stay the same on all nine maps: Left/Right changes Palace and
@@ -105,45 +208,84 @@ Use **V** on the map to enter the Velvet Room. A brief blue prison-gate
 scene leads into its working Fusion and Compendium menu. Enter, Esc, or
 Space skips the scene without activating a menu choice. To see it again,
 exit the room and press V. Use Left/Right to switch the menu tabs.
-First fusion remains a straightforward registration. Re-fusing an already
-registered mask previews retained, added and removed skills before an
-explicit confirmation. Only a previous inheritance tracked as such can be
-replaced; Skill Card moves and older unclassified extras remain. A revision
-leaves the mask equipped if it was already equipped.
+Fusion consumes both parents from stock and keeps their Compendium records.
+Review the result, inherited skill, credit cost, equipped Personas, and any
+new lead’s weaknesses before confirming. Skill Cards preview their effect and
+show duplicates and full skill lists as unavailable. If a parent was equipped or led the lineup, the result
+takes its place. Re-fusion can replace a previously tracked inherited skill,
+but preserves Skill Card moves and older unclassified extras. In the
+Compendium, select an archived Persona and press Enter to review its
+resummon cost; confirming returns it to stock with its registered skills.
+Equip it separately if you want it in battle.
 
-Testing Mode offers **X** on the Fusion tab for a separate fresh practice
+Persona 5 Battle Practice offers **X** on the Fusion tab for a separate fresh practice
 stock; it doesn't affect the full Testing roster or your Story save. In Story,
 when an eligible Shadow is down during Hold Up, a Shadow Contract may offer
 a new Persona instead of an All-Out Attack. The Shadow withdraws, but the
-recruit only registers when that operation's first clear saves. There is no
-repeat contract farming or recruitment in Classic Trials.
+recruit only registers when a victory saves.
+Replays can register a missed, eligible Shadow once without granting first-clear
+bonuses again. There is no duplicate recruitment or recruitment in Classic Trials.
+Ordinary enemy affinities you learn by attacking carry between story battles
+after a victory in both campaigns; untested elements and phase-changing
+bosses stay separate.
 
 Combat displays your current and previewed mask’s defenses, and labels
-only discovered enemy reactions. Attempt exits and unsaved victories
+only discovered enemy reactions. Both games place HP and SP bars next to
+each ally, and briefly mark what a move changed on the affected rows.
+The battle log keeps the longer history. Persona 3 shows who is due to act
+next; an exposed boss is vulnerable but is not necessarily knocked down.
+Item numbers do not move when stock
+runs out during a fight. On a defeat, **A** opens Adjust Lead where
+available; Escape cancels the change, and Enter applies your choice.
+Persona 3 Continue restores pending Shuffle Time choices and required post-boss
+scenes before returning to the calendar. The final ascent remembers carried
+HP, SP, supplies, and charge. Restock restores resources without clearing
+Theurgy. Last-day exits warn before expiring a rescue or dated errand.
+Reload's November recording can replay the original July fragment. On
+Lower Arqa revisits, look for details by the stair rails. Attempt exits and unsaved victories
 ask before discarding the current result.
 
 ## Verification
 
 Run `python3 -B -m unittest discover -q`. Any testing script should use
-Testing Mode or a disposable separate save slot, never a live save.
+Battle Practice or a disposable separate save slot, never a live save.
 
-## Animation Gallery
+## Extras
 
-On the title screen, press **4** to open the gallery (Quit is **5**).
-From the **Testing Mode** map, press **G**. Esc from the gallery returns to
-the same palace and mission without resetting your practice loadout.
-On the map, **T** opens Classic Trials. **Esc** goes back: from Classic
-Trials setup or its main battle menu it returns to the map, and an active
-Classic fight stays paused. **Esc** from the palace map returns to the title.
+From the shared series selector, open **Extras** (or press **X**).
+Choose **Persona 3** or **Persona 5**, then **Animation Gallery** or
+**Battle Practice**. Press **Esc** to move back one level. Neither game’s
+normal title screen contains testing shortcuts, and story tutorials are
+unchanged. Extras never change story saves.
+
+In Persona 5 Battle Practice, **T** opens Classic Trials. Esc backs out
+to the practice map, and Esc from that map returns to Persona 5 Extras.
+
+In Persona 3's gallery and practice lists, **Left/Right** changes group
+and **Up/Down** selects an entry. Each group remembers its selection while
+you browse.
+
+The Persona 3 **All-Out Attacks** gallery includes each fighter's finisher
+and the shared Squad Rush. In battle, a nonlethal All-Out plays the short
+rush; a winning hit continues to the initiating fighter's finish card.
+All nine finishers and Squad Rush use an illustrated 2×4 dot grid inside
+each character cell for extra detail without resizing the terminal. The
+same technique is used for the opening, Tartarus elevator, Velvet Room,
+Theurgies and Oracle reels. The Dark Hour countdown retains the original
+layered-clock artwork and timing. See the [Persona 3 art references](persona3_allout_references.md)
+and [cinematic reference notes](persona3_animation_references.md).
+
+### Persona 5 Animation Gallery
 Use Left/Right for categories, Up/Down to select, and Enter to preview.
 Press **P** to play all, **L** to loop the current scene, **R** to replay,
 or **Esc** to back out.
 Gallery previews do not read or alter battle progress.
 
-The eight Showtimes are full original ASCII scenes. **All-Out Attacks** has
+The eight Showtimes are redrawn from scratch as original 2×4 dot scenes. **All-Out Attacks** has
 nine animated character finishers. **Oracle Support** has three action-only
 scenes: the squad recovery relay, Final Guard's shield, and the UFO flyover.
-Final Guard is a preview only in this build. Playback is artwork only:
+Once unlocked, Final Guard blocks the first lethal enemy hit on an ally
+once per battle. Playback is artwork only:
 no portrait cards, scene captions, or control overlays. The only lettering
 during playback is the signature text on a finishing All-Out Attack
 (including the UFO); non-lethal hits and Showtimes stay text-free. Clips redraw against
@@ -160,10 +302,15 @@ award the All-Out finishing signature. In a Story or Testing fight,
 **?**, then **C**, puts completed repeat variants on Short playback for
 this session. Unseen clips and Gallery playback stay full length.
 
-Art references: [Royal Showtime gameplay](https://www.youtube.com/watch?v=NzZLv8X2sJA),
-[Queen & Noir gameplay](https://www.youtube.com/watch?v=Dv9JIJk7t7E),
-[Royal All-Out gameplay compilation](https://www.youtube.com/watch?v=8-tIjvQjXS8),
-[ATLUS Futaba spotlight](https://p-ch.jp/news/3885/) and
-[Royal Oracle gameplay](https://www.youtube.com/watch?v=W3J4rSjfgeE).
-All character-cell art was drawn for this app; no game images, video or audio
-are bundled.
+### Visual reference notes
+
+- [Live terminal artwork audit and references](terminal_art_inventory.md)
+
+- [Selector, Persona 3 opening, and smaller visual cues](suite_animation_references.md)
+- [Persona 5 Showtimes](persona5_showtime_references.md)
+- [Persona 5 All-Out Attacks and Oracle](persona5_finish_references.md)
+- [Persona 5 startup, Velvet Room, and Sinful Shell](persona5_story_references.md)
+
+These notes distinguish in-game references from original staging. All
+illustrations are drawn with terminal characters; no game images, video,
+or audio are bundled.

@@ -74,14 +74,14 @@ class CasinoRoute:
                   'Not enough coins for the card.' if self.coins < CARD_COST else ''),
             )
         if self.stage == 'darkness':
-            return (
-                o('door', 'Check the service door', 'The door is locked from this side.' if self.door_checked else ''),
-                o('vent', 'Crawl through the low vent',
-                  'Check the service door first.' if not self.door_checked else
-                  'The squad is already through.' if self.through_vent else ''),
-                o('exit', 'Follow the lit passage',
-                  'Reach the far side of the wall first.' if not self.through_vent else ''),
-            )
+            options = [o('door', 'Check the service door',
+                         'The door is locked from this side.' if self.door_checked else '')]
+            if self.door_checked:
+                options.append(o('vent', 'Crawl through the low vent',
+                                 'The squad is already through.' if self.through_vent else ''))
+            if self.through_vent:
+                options.append(o('exit', 'Follow the lit passage'))
+            return tuple(options)
         if self.stage == 'bridge':
             deposit = self.bridge_deposit
             return (
@@ -101,6 +101,9 @@ class CasinoRoute:
     def choose(self, id):
         row = next((o for o in self.rows() if o.id == id), None)
         if row is None:
+            if self.stage=='darkness' and id in ('vent','exit'):
+                self.notice = 'Search this side of the wall first.'
+                return False
             raise ValueError(f'Unknown Casino action: {id}')
         self.notice = row.block
         if row.block:
@@ -128,7 +131,7 @@ class CasinoRoute:
             return True
         elif id == 'door':
             self.door_checked = True
-            self.notice = 'Locked. Third Eye picks out a vent beside the door.'
+            self.notice = 'Locked. A draft catches your sleeve. Third Eye picks out a vent.'
         elif id == 'vent':
             self.through_vent = True
             self.notice = 'The squad drops onto the far ledge. A light marks the way out.'
@@ -144,3 +147,15 @@ class CasinoRoute:
         else:  # Leave Dice, Darkness, or the Bridge of Judgment.
             return True
         return False
+
+
+
+def draw_route_art(app,route):
+    """Illustrate the existing giant-slot readout without replacing its digits."""
+    if route.stage!='slots':return
+    import persona5_story_art as art
+    # The host owns row 7's exact result and left-hand actions. Keep the
+    # cabinet right of every full label, including its selection prefix.
+    x=max(round(app.w*.62),9+max(len(row.label) for row in route.rows()))
+    art.draw(app,art.slot,x,8,app.w-x-3,8,hub=route.slot_hub,
+             bypassed=route.bypassed,jackpot=route.jackpot)

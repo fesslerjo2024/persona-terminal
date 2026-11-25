@@ -7,13 +7,48 @@ from unittest.mock import patch
 
 from battle_ui import ESC, GOLD
 from campaign_state import Campaign
-from suite_menu import SuiteMenu, TITLES, cards, draw
-from suite_art import PULSE_SECONDS, TUMBLE_SECONDS, emblem_runs
+from suite_menu import EXTRAS_BUTTON, SuiteMenu, TITLES, cards, draw
+from suite_art import INKS, PIN_SECONDS, emblem_runs
 from test_animation_gallery import Surface
 from test_startup import ScriptedScreen
 
 
 class SuiteMenuTests(TestCase):
+    def test_extras_button_is_clickable_and_keyboard_accessible(self):
+        for w,h in ((65,25),(96,35)):
+            app=SuiteMenu(None);app.w,app.h=w,h
+            app.choose('5')
+            self.assertIsNone(app.choose(C.KEY_DOWN))
+            self.assertEqual(app.choose('\n'),'extras')
+            self.assertEqual(app.selection,2)
+            app.choose(C.KEY_UP)
+            self.assertEqual(app.choose('\n'),5)
+            x=(w-len(EXTRAS_BUTTON))//2
+            with patch('suite_menu.C.getmouse',return_value=(0,x,h-5,0,C.BUTTON1_CLICKED)):
+                self.assertEqual(app.choose(C.KEY_MOUSE),'extras')
+            self.assertEqual(app.choose('X'),'extras')
+
+    def test_extras_esc_and_remembered_selection(self):
+        for w,h in ((65,25),(96,35)):
+            class Screen:
+                keys=iter(('2','2',ESC,'1','1',ESC,'\n','\n',ESC,ESC))
+                def getmaxyx(self):return h,w
+                def timeout(self,ms):pass
+                def erase(self):pass
+                def refresh(self):pass
+                def get_wch(self):return next(self.keys)
+            app=SuiteMenu(Screen())
+            written=[]
+            app.put=lambda y,x,label,*_:written.append((y,x,label))
+            seen=[]
+            with patch.object(app,'_mouse'):
+                self.assertTrue(app._extras(lambda leaf:seen.append((3,leaf)),
+                                             lambda leaf:seen.append((5,leaf))))
+            self.assertEqual(seen,[(5,'practice'),(3,'gallery'),(3,'gallery')])
+            self.assertEqual(app.extras_leaves,{3:0,5:1})
+            self.assertFalse(any('Persona 4' in text for _,_,text in written))
+            self.assertTrue(all(0<=y<h-1 and 0<=x<=x+len(text)<w for y,x,text in written))
+
     def test_number_arrows_enter_and_p4_are_independent(self):
         app=SuiteMenu(None)
         self.assertEqual(app.choose('3'),3)
@@ -47,24 +82,26 @@ class SuiteMenuTests(TestCase):
         boxes=cards(app.w,app.h)
         for selection in (0,1,2):
             out.clear();draw(app,selection)
-            for box,detail in zip(boxes,('●','▒░▒','▄▄▄')):
-                self.assertTrue(any(detail in t and box.contains(x,y) for y,x,t,_ in out))
+            for box in boxes:
+                self.assertTrue(any(any('⠁'<=ch<='⣿' for ch in t) and box.contains(x,y)
+                                    for y,x,t,_ in out))
             p4=boxes[1]
             painted=[(t,color) for y,x,t,color in out if p4.contains(x,y)]
             self.assertTrue(any('PERSONA 4' in t for t,_ in painted))
-            self.assertTrue(all(color==GOLD for _,color in painted))
+            self.assertTrue(all(color==GOLD for text,color in painted if 'PERSONA 4' in text or '═' in text))
+            self.assertTrue(any(color==INKS['amber'] for _,color in painted))
 
     def test_every_emblem_animates_and_settles_without_geometry_drift(self):
         for title in TITLES:
             with self.subTest(title=title.number):
-                idle=emblem_runs(title.number,17,title.ink)
-                first=emblem_runs(title.number,17,title.ink,.12)
-                later=emblem_runs(title.number,17,title.ink,.36)
+                idle=emblem_runs(title.number,17,9)
+                first=emblem_runs(title.number,17,9,.12)
+                later=emblem_runs(title.number,17,9,.36)
                 self.assertNotEqual(first,later)
                 self.assertNotEqual(first,idle)
-                self.assertEqual(emblem_runs(title.number,17,title.ink,title.animation_seconds),idle)
+                self.assertEqual(emblem_runs(title.number,17,9,title.animation_seconds),idle)
                 for all_rows in (idle,first,later):
-                    self.assertEqual(len(all_rows),7)
+                    self.assertEqual(len(all_rows),9)
                     for row in all_rows:
                         self.assertTrue(all(0<=x<=x+len(run)<=17 for x,run,_ in row))
 
@@ -76,35 +113,25 @@ class SuiteMenuTests(TestCase):
             self.assertEqual(app.selection,focus)
             self.assertIsNone(app.pulse_started)
 
-    def test_animated_clock_hands_share_pivot_and_end_at_twelve(self):
-        title=TITLES[0]
-        def glyphs(rows):
-            grid=[[' ']*17 for _ in range(7)]
-            for y,row in enumerate(rows):
-                for x,run,_ in row:grid[y][x:x+len(run)]=run
-            return grid
-        first=glyphs(emblem_runs(3,17,title.ink,.08))
-        last=glyphs(emblem_runs(3,17,title.ink,PULSE_SECONDS*.87))
-        self.assertIn('─',''.join(first[3][:8]))
-        self.assertEqual(last[3][8],'●')
-        self.assertEqual((last[1][8],last[2][8]),('│','│'))
-        self.assertIn('12',''.join(last[0]))
-        self.assertNotEqual(first,last)
+    def test_selector_matches_the_approved_previews_at_rest_and_during_playback(self):
+        from selector_draft_gallery import candidates, picture
+        for title,name in zip(TITLES,('Dark Hour Clock','Golden Tube TV','Pinned Calling Card')):
+            with self.subTest(title=title.number):
+                self.assertEqual(candidates(title.number)[0][0],name)
+                for phase,elapsed in ((0,0),(18,title.animation_seconds/2),(36,None)):
+                    rows=picture(title.number,0,26,11,phase)
+                    expected=[]
+                    for row in rows:
+                        x=1
+                        expected_row=[]
+                        for run,pigment in row:
+                            if run.strip():expected_row.append((x,run,INKS[pigment]))
+                            x+=len(run)
+                        expected.append(tuple(expected_row))
+                    self.assertEqual(emblem_runs(title.number,28,11,elapsed),tuple(expected))
 
-    def test_p5_default_is_tumbling_card_and_launch_keeps_full_motion(self):
-        from battle_ui import RED, WHITE
-        title=TITLES[2]
-        self.assertEqual(title.opening_seconds,TUMBLE_SECONDS)
-        idle=emblem_runs(5,17,title.ink)
-        white=''.join(text for row in idle for _,text,ink in row if ink==WHITE)
-        self.assertIn('▄▄▄',white)
-        self.assertIn('◥▴◤',white.replace(' ',''))
-        self.assertTrue(any(ink==RED for row in idle for _,_,ink in row))
-        # Mid-flight, some paper has rotated flat against the viewer, but
-        # the crest isn't printed on the visible face of the sheet yet.
-        preflip=emblem_runs(5,17,title.ink,TUMBLE_SECONDS*.33)
-        self.assertFalse(any('◥' in text for row in preflip for _,text,_ in row))
-
+    def test_pinned_card_launch_keeps_full_motion(self):
+        self.assertEqual(TITLES[2].opening_seconds,PIN_SECONDS)
         app=SuiteMenu(None)
         class Screen:
             now=0
@@ -124,7 +151,7 @@ class SuiteMenuTests(TestCase):
             self.assertEqual(app._selection(),5)
         self.assertEqual(len(phases),4)
         self.assertEqual(phases[0],(0,None))
-        self.assertTrue(all(index==2 and t<TUMBLE_SECONDS for index,t in phases[1:]))
+        self.assertTrue(all(index==2 and t<PIN_SECONDS for index,t in phases[1:]))
         self.assertGreater(phases[-1][1],.75)
 
     def test_preview_does_not_open_p5_and_returns_to_selector(self):

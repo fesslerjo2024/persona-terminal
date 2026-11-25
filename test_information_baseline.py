@@ -45,7 +45,7 @@ class InformationBaselineTests(unittest.TestCase):
                 with patch.object(app,'put',wraps=app.put) as draw:
                     app.draw_map()
                 messages=[args for args,_ in draw.call_args_list]
-                for label in ('G ANIMATION GALLERY','T CLASSIC TRIALS','ESC TITLE'):
+                for label in ('T CLASSIC TRIALS','ESC EXTRAS'):
                     rows=[y for y,x,text,*_ in messages if label in text]
                     self.assertEqual(rows,[height-2])
                 self.assertFalse(any('Enter for briefing' in text for _,_,text,*_ in messages))

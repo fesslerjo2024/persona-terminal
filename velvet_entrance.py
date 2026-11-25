@@ -1,216 +1,187 @@
-"""Native-cell entrance: a locked blue prison unfolds into the Velvet Room."""
+"""The Persona 5 prison opens as original, layered 2×4 terminal dot art."""
 from math import cos, pi, sin
-from wide_canvas import Canvas
+
+from detail_canvas import DotCanvas
 
 DURATION = 2.85
 
 
 def _ease(t):
-    t=min(1.,max(0.,t))
+    t = min(1., max(0., t))
     return t*t*(3-2*t)
 
 
-def _path(c, points, ink, limit=None):
-    for (x,y),(xx,yy) in zip(points,points[1:]):
-        c.line(x,y,xx,yy,ink,limit)
+def _rectangle(c,x,y,w,h,ink, density=8, edge=None):
+    c.face(((x,y),(x+w,y),(x+w,y+h),(x,y+h)),ink,density,edge)
 
 
-def _arch(c,x,y,rx,ry,foot,ink):
-    crown=[(x+rx*cos(j*pi/14), y-ry*sin(j*pi/14)) for j in range(15)]
-    _path(c,crown,ink)
-    for edge in (x-rx,x+rx):
-        c.line(edge,y,edge,foot,ink,'|')
+def _arched_frame(c,x,y,rx,ry,foot,dark,rim):
+    c.ring(x,y,rx,ry,dark,pi,2*pi,steps=72)
+    c.ring(x,y,rx-2,ry-2,rim,pi,2*pi,steps=72)
+    for side in (-1,1):
+        c.line((x+side*rx,y),(x+side*rx,foot),dark)
+        c.line((x+side*(rx-2),y),(x+side*(rx-2),foot-1),rim)
 
 
-def _room(c,t,open_,advance):
+def _vault(c,t,open_,approach):
     w,h=c.w,c.h
     mid=w*.5
-    floor=round(h*(.62+.045*advance))
-    spring=h*(.35+.025*advance)
-    # Farthest arch and barred blue alcove. The nearer vault is formed by
-    # the corridor's ribs, with floor seams receding to the alcove threshold.
-    rx=w*(.15+.035*advance)
-    for d in (2,0):
-        _arch(c,mid,spring,rx+d,max(1,h*.14+d*.17),floor,'navy' if d else 'slate')
-    for i in range(-4,5):
-        x=mid+rx*i/5
-        y=spring-h*.14*(1-(i/5)**2)**.5
-        c.line(x,y,x,floor-.5,'navy','|')
-        c.put(round(x),floor,'+','slate')
+    horizon=h*(.59+.10*approach)
+    vanish=(mid,h*(.48+.04*approach))
+    # Cylindrical ceiling and opposing upper galleries. The farther vault
+    # stays fixed while foreground ironwork moves past the camera.
+    for j in range(4,-1,-1):
+        depth=.23+j*.17
+        rx=w*depth*.49
+        ry=h*(.12+j*.050)
+        spring=h*(.30-j*.021+approach*.014)
+        base=horizon+h*(j*.055)
+        _arched_frame(c,mid,spring,rx,ry,base,'navy','slate' if j<3 else 'navy')
     for side in (-1,1):
+        panel=(mid+side*w*.17,h*.48)
+        end=(mid+side*w*.49,h*.37)
+        c.face((panel,end,(end[0],horizon+h*.15),(panel[0],horizon)),
+               'navy',2,'navy')
         for j in range(3):
-            x=mid+side*w*(.23+j*.125)
-            top=h*(.30-j*.115)
-            base=floor+h*(.031+j*.087)
-            c.line(x,top,x,base,'navy','|')
-            c.line(x+side,top-1,x+side,base,'slate','|')
-            c.line(x,top,mid+side*rx,spring,'navy')
-            c.line(x,base,mid+side*rx,floor,'slate')
-            for k in range(1,4):
-                z=x+side*(j+2)*k
-                zz=z-side*(j+1)*.66
-                c.line(z,top+(k%2),zz,base-k*.24,'navy','|')
-            if j<2:
-                lamp_x=round(x+side*2)
-                lamp_y=round(top+h*.16)
-                c.put(lamp_x-1,lamp_y,('.','|||','-'),'teal' if open_>.6 else 'navy')
-    for i in range(-4,5):
-        x=w*(.5+i*.14)
-        c.line(mid+rx*.27*i,floor,x,h-1,'navy')
-    for y in range(floor+1,h):
-        z=(y-floor)/max(1,h-floor)
-        if (y-floor) not in {1,3,6,10,15,21}:
-            continue
-        stride=max(4,round(w*(.08+.032*z)))
-        for x in range(-stride+(y*13)%stride,w,stride):
-            c.put(x,y,'-.' if y%2 else '---','slate' if z>.4 else 'navy')
-    # A soft rotating beam descends from the overhead vault.
-    tick=round(t*13)
-    sweep = sin(t*2.3-1.3)
-    for i in range(max(16,w//4)):
-        y=(i*17+tick*(i%3+1))%max(2,floor+1)
-        x=round(mid+sweep*(i//9+1)+((i*23)%17-8)*(1+y/h))
-        if (i+tick)%5<3:
-            c.put(x,y,'.' if i%4 else '+','teal' if open_>.45 and i%4==0 else 'navy')
-    if open_>.26:
-        _table(c,t,floor,advance,open_)
+            x=mid+side*w*(.23+j*.104)
+            y=h*(.42-.045*j)
+            foot=horizon+h*(.014+.052*j)
+            r=w*(.018+j*.004)
+            _arched_frame(c,x,y,r,h*(.052+j*.013),foot,'navy','slate')
+            for i in range(-2,3):
+                u=x+i*r/3
+                c.line((u,y-h*(.045+j*.008)),(u,foot),'navy')
+            c.ellipse(x,h*(.34-.044*j),1.8+j*.7,2.4+j*.35,'teal' if open_>.5 else 'navy',6,
+                      'slate')
+            c.line((x-2,foot),(x+2,foot),'slate')
+        c.line((mid+side*w*.14,h*.45),(mid+side*w*.5,h*.28),'slate')
+        c.line((mid+side*w*.13,h*.46),(mid+side*w*.5,h*.32),'navy')
+        for i in range(15):
+            q=(i+1)/15
+            xx=mid+side*w*(.14+.36*q); yy=h*(.45-.17*q)
+            c.line((xx,yy),(xx,yy+h*(.007+.031*q)),'navy')
+    # Cold polished checker stone in single point perspective.
+    bands=(0,.09,.16,.24,.35,.48,.65,.85,1.1)
+    for j,(a,b) in enumerate(zip(bands,bands[1:])):
+        y=horizon+(h-horizon)*a;yy=horizon+(h-horizon)*b
+        scale=.16+a*.88; other=.16+b*.88
+        for i in range(-8,8):
+            x0=(i/8)*w*.65; x1=((i+1)/8)*w*.65
+            c.face(((mid+x0*scale,y),(mid+x1*scale,y),(mid+x1*other,yy),
+                    (mid+x0*other,yy)),'navy' if (i+j)%2==0 else 'slate',density=3 if j else 2)
+        c.line((mid-w*scale*.62,y),(mid+w*scale*.62,y),'navy')
+    for i in range(-7,8):
+        c.line(vanish,(mid+w*i*.107,h-1),'navy')
+    for i in range(82):
+        x=(i*149+i*i*17+round(sin(t*1.03)*i*2))%max(1,w)
+        y=(i*23+i*i*3+round(t*6*(1+i%4)))%max(1,round(horizon))
+        if i%3 or open_>.28:c.put(x,y,'teal' if i%11==0 else 'navy')
+    return horizon
 
 
-def _table(c,t,floor,advance,open_):
-    w,h=c.w,c.h; mid=round(w*.5)
-    a=max(6,round(w*(.145+.075*advance)))
-    depth=max(2,round(h*(.08+.025*advance)))
-    rear=floor-1
-    lip=rear+depth
-    hem=min(h-3,lip+max(2,round(h*.16)))
-    rim='slate' if open_<.65 else 'teal'
-    for row in range(rear,lip+1):
-        d=(row-rear)/depth
-        span=round(a*(.72+d*.28))
-        x=mid-span
-        pattern='.' if row%2 else ':'
-        ch='=' if row==lip else '-' if row==rear else None
-        if ch:
-            c.put(x,row,ch*(span*2+1),rim,opaque=True)
-        else:
-            c.put(x,row,pattern+' '*max(0,span*2-1)+pattern,'teal',opaque=True)
-            for k in range(-span+4,span,6):
-                c.put(mid+k,row,'.','navy')
-    for y in range(lip+1,hem+1):
-        span=a+round((y-lip)*.43)
-        chars=[' ']*(span*2+1)
-        chars[0],chars[-1]=('/','\\') if y%2 else ('|','|')
-        for i in range(3,len(chars)-2,4 if advance<.45 else 5):
-            chars[i]='.' if (i+y)%4==0 else ':'
-        c.put(mid-span,y,''.join(chars),'navy',opaque=True)
-        for x in (mid-span,mid+span):
-            c.put(x,y,chars[0] if x<mid else chars[-1],rim)
-        if y==hem:
-            c.put(mid-span,y,('~_'*(span+1))[:span*2+1],'slate')
-    # Page seams, a blue bookmark, and two flanking pools of candlelight.
-    page=max(3,w//19)
-    book_y=rear-1
-    c.put(mid-page-1,book_y,'/_'+'-'*(page-2)+'\\'+'/'+ '-'*(page-2)+'_\\',rim,opaque=True)
-    c.put(mid-page-1,book_y+1,'\\'+'_'*(page-1)+'_/\\_'+'_'*(page-1)+'/', 'white' if open_>.85 else 'slate',opaque=True)
-    c.put(mid,book_y+2,'|','teal')
+def _staff(c,floor,opening,advance,t):
+    w,h=c.w,c.h
+    mid=w*.50
+    y=h*(.40+.17*advance)
+    s=min(w/154,h/110)*(.70+.48*advance)
+    def face(x,y,coords,ink,density=8,edge=None):
+        c.face(tuple((x+u*s,y+v*s) for u,v in coords),ink,density,edge)
+    def line(x,y,a,b,ink):
+        c.line((x+a[0]*s,y+a[1]*s),(x+b[0]*s,y+b[1]*s),ink)
+    eye='white' if opening>.80 else 'teal'
+    # The two smaller wardens bookend Igor's oversized chair.
     for side in (-1,1):
-        x=round(mid+side*a*.56)
-        c.put(x-2,rear-3,(" .'." if int(t*11+side)%2 else " .*.",'  | ',' _T_ '),
-              'teal' if open_<.82 else 'cyan')
-    if open_>.8:
-        for x in range(mid-a,mid+a+1,4):
-            p=(x+round(t*8))%9
-            if p<3:
-                c.put(x+((p+1)%3)-1,lip+1,':','teal')
+        x=mid+side*s*(33+5*advance)
+        yy=y+2*s
+        tilt=side*round(sin(t*1.3)*.5)
+        face(x,yy,((-9,-4),(-12,-11),(-7,-15),(7,-15),(12,-11),
+                   (10,-4),(8,-8),(-8,-8)),'navy',7,'teal')
+        face(x,yy,((-7,-8),(-8,-3),(-7,4),(0,7),(7,3),(8,-5),(6,-9)),
+             'slate',6,'teal')
+        line(x,yy,(-6,-2),(-2,-2),eye if side<0 else 'navy')
+        line(x,yy,(2,-2),(6,-2),eye if side>0 else 'navy')
+        face(x,yy,((-8,6),(-12,13),(-13,28),(-8,29),(-5,20),(-7,37),
+                   (8,37),(6,19),(10,29),(13,28),(12,13),(7,6)),'navy',7,'slate')
+        line(x,yy,(-8,7),(0,17),'teal');line(x,yy,(7,7),(0,17),'teal')
+        line(x,yy,(tilt,16),(0,26),'white')
+        for dy in (20,23,26): c.put(round(x),round(yy+s*dy),'amber')
+    # Tall chair back, gaunt cheek, long pointed nose, lapels and gloved hands.
+    face(mid,y,((-16,-21),(-11,-29),(11,-29),(16,-21),(15,24),(-15,24)),
+         'navy',6,'slate')
+    face(mid,y,((-9,-14),(-7,-20),(6,-20),(10,-14),(9,-4),(5,5),(-5,5),(-9,-2)),
+         'slate',6,'teal')
+    face(mid,y,((-8,-2),(-4,-9),(-2,-9),(2,-3),(9,0),(9,2),(1,3),(-6,2)),
+         'white' if opening>.78 else 'slate',5,'teal')
+    for side in (-1,1):
+        line(mid,y,(side*4,-11),(side*7,-9),eye)
+        face(mid,y,((side*6,3),(side*15,8),(side*23,20),(side*12,20),
+                    (side*4,11),(0,17),(0,7)),'navy',8,'slate')
+        line(mid,y,(side*15,8),(side*6,12),'teal')
+        line(mid,y,(side*4,20),(side*15,17),'slate')
+    face(mid,y,((-11,18),(-4,16),(0,19),(5,16),(12,18),(10,21),(2,22),(-5,22)),
+         'teal',6,'slate')
+    # Dark ledger desk and one open compendium, near the final camera mark.
+    desk=min(h*.89,max(floor,y+21*s))
+    left=mid-w*(.16+.1*advance);right=w-left
+    c.face(((left,desk),(right,desk),(right+w*.055,desk+s*12),(left-w*.055,desk+s*12)),
+           'navy',7,'teal')
+    c.line((left-w*.051,desk+s*10),(right+w*.051,desk+s*10),'slate')
+    book=s*12
+    c.face(((mid-book,desk+s*1.5),(mid-s*2,desk-s*2),(mid,desk),
+            (mid+s*2,desk-s*2),(mid+book,desk+s*1.5),
+            (mid+s*4,desk+s*5),(mid,desk+s*4),(mid-s*4,desk+s*5)),
+           'slate',6,'white' if opening>.77 else 'teal')
+    c.line((mid,desk),(mid,desk+s*4),'teal')
+    for side in (-1,1):
+        for i in range(3):
+            c.line((mid+side*(2+i)*s,desk+s*(.7+i*.85)),
+                   (mid+side*(8+i)*s,desk+s*(.1+i*.68)),'navy')
 
 
-def _pillars(c,t,open_,camera):
+def _doors(c,t,release,push):
     w,h=c.w,c.h
-    cx=w*.5
-    left=w*(.17-.10*camera-.06*open_)
-    right=w-1-left
-    top=h*(.23-.08*camera)
-    base=h*(.83+.08*camera)
-    rx=(right-left)*.5
-    # Curved transom and foot track remain fixed while each leaf moves.
-    for off in (2,0):
-        _arch(c,cx,top,rx+off,h*(.13+off*.007),base+.85,'navy' if off else 'slate')
-    for x,sign in ((left,-1),(right,1)):
-        c.line(x,top,x,base,'slate','|')
-        c.line(x+sign*2,top+1,x+sign*2,base+1,'navy','|')
-        c.put(round(x)-2,round(top),'[::]','teal')
-        c.put(round(x)-2,round(base)+1,'[_]','navy')
-    c.line(left,base+1,right,base+1,'navy','_')
-    return left,right,top,base
-
-
-def _gate(c,t,left,right,top,base,open_):
-    w,h=c.w,c.h
-    cx=(left+right)*.5
-    a=pi*.5*open_
-    gate_rx=(right-left)*.5
-    energy=.44<t<1.17
-    beam=left+((t-.44)/.73)*(right-left)
-    for hinge,sign in ((left,1),(right,-1)):
-        # Doors hinge outward from the posts and foreshorten toward the
-        # edge; the inside end drifts farther from the viewer in projection.
-        thickness=max(5,round(w*.11))
-        samples=max(7,thickness)
-        def xy(u,v):
-            z=sin(a)*u
-            x=hinge+sign*gate_rx*cos(a)*u
-            y=top+h*(.021*u+.095*z)+(base-top-h*.18*z)*v
-            return x,y
-        border=[xy(0,0),xy(1,0),xy(1,1),xy(0,1),xy(0,0)]
-        _path(c,border,'slate')
-        for height in (.06,.27,.70,.97):
-            _path(c,[xy(j/12,height) for j in range(13)],'navy','=')
-        for k in range(samples+1):
-            u=k/samples
-            x,y=xy(u,0)
-            xx,yy=xy(u,1)
-            near_light=energy and abs(x-beam)<max(2,w*.05)
-            ink='cyan' if near_light else 'slate' if k%2 else 'navy'
-            c.line(x,y,xx,yy,ink,'|' if k%3 else ':')
-            if k%2 or near_light:
-                cap_x,cap_y=xy(u,.265)
-                c.put(round(cap_x),round(cap_y),'+' if near_light else ':',ink)
-        # Each plate carries a keyed half of the same round center seal.
-        x,y=xy(.97,.53)
-        fx,fy=round(x),round(y)
-        if open_<.19:
-            if sign==1:
-                c.put(fx-2,fy-1,('/-', '|<', '\\_'),'teal' if t>.48 else 'slate')
-            else:
-                c.put(fx+1,fy-1,('-\\','>|','_/'),'teal' if t>.48 else 'slate')
-        elif .19<open_<.85:
-            c.put(fx,fy,'.' if sign==1 else '+','teal')
-    if open_<.14:
-        x,y=round(cx),round(top+(base-top)*.53+h*.021)
-        glow=.52<t<1.04
-        c.put(x-1,y-1,('.-.','(*)','\\_/'),'white' if glow else 'teal',opaque=True)
-        if glow:
-            pulse=max(2,round((t-.50)*w*.15))
-            for x,punc in ((x-pulse,'<'),(x+pulse,'>')):
-                c.put(x,y,punc,'cyan')
-    elif 1.12<t<1.65:
-        f=(t-1.12)/.53
-        for i in range(14):
-            x=round(cx+(i%7-3)*f*w*.052)
-            y=round(h*.52+(i//7*2-1)*(i%7+1)*f*.59)
-            c.put(x,y,'.' if i%3 else '+','teal')
+    mid=w*.5
+    l=(w*(.10-.09*push)); r=w-l
+    top=h*(.20-.09*push);foot=h*(.83+.16*push)
+    rx=(r-l)/2
+    _arched_frame(c,mid,top,rx,h*(.105+.025*push),foot,'navy','slate')
+    for edge,side in ((l,1),(r,-1)):
+        a=pi*.5*release
+        def local(u,v):
+            angle=sin(a)*u
+            return edge+side*rx*cos(a)*u,top+(foot-top)*v+h*.054*u*(1-v)+h*.081*angle
+        for j in range(14):
+            u=j/13
+            a0=local(u,0);a1=local(u,1)
+            ink='cyan' if .51<t<1.15 and abs(u-(.95-(t-.51)*.6))<.09 else 'slate' if j%3 else 'navy'
+            c.line(a0,a1,ink)
+            if j%2:
+                c.line((a0[0]+side,a0[1]+1),(a1[0]+side,a1[1]-1),'navy')
+        for v in (0.,.07,.68,.72,.96,1.):
+            c.path([local(j/13,v) for j in range(14)],'slate' if v in (0.,1.) else 'navy')
+    if release<.26:
+        y=top+(foot-top)*.49+h*.036
+        lock=max(4,min(w,h)*.065)
+        light=_ease((t-.41)/.60)
+        c.ellipse(mid,y,lock*1.23,lock,'navy',8,'teal')
+        c.ring(mid,y,lock*.99,lock*.80,'cyan' if light>.36 else 'slate')
+        c.ring(mid,y,lock*.73,lock*.57,'slate')
+        c.ellipse(mid,y-lock*.19,lock*.21,lock*.21,'amber' if light>.3 else 'teal')
+        c.face(((mid,y),(mid-lock*.22,y+lock*.37),(mid+lock*.22,y+lock*.37)),
+               'amber' if light>.3 else 'teal')
+        if .52<t<1.00:
+            r=lock*(1.15+_ease((t-.51)/.49)*1.35)
+            c.ring(mid,y,r,r*.75,'teal')
 
 
 def render(t,w,h):
-    """Return viewport-sized runs of (ASCII text, scene pigment)."""
-    c=Canvas(w,h)
-    if not w or not h:
-        return c.finish()
+    c=DotCanvas(w,h)
+    if not w or not h:return c.finish()
     t=max(0.,min(DURATION,float(t)))
-    approach=_ease(t/.65)
-    opening=_ease((t-.91)/1.14)
-    advance=_ease((t-1.62)/1.16)
-    _room(c,t,opening,advance)
-    gates=_pillars(c,t,opening,approach)
-    _gate(c,t,*gates,opening)
+    release=_ease((t-.85)/1.13)
+    advance=_ease((t-1.24)/1.47)
+    push=_ease(t/1.20)
+    floor=_vault(c,t,release,advance)
+    _staff(c,floor,release,advance,t)
+    if release<.995:_doors(c,t,release,push)
     return c.finish()

@@ -12,23 +12,25 @@ from reel_palette import install as install_scene_palette
 from title_scene import PRODUCT_TITLE, STARTUP_SECONDS, draw_startup, draw_title
 import velvet_entrance
 import velvet_menu
+import bank_vault
+import campaign_story
+import first_escape
+from spaceport_press import PressConsole
+from lab_infiltration import LabInfiltration, entry_label as lab_entry_label
+from bank_vault import VAULT_WORDS
 from battle_data import TEAM
 from battle_ui import RED, GOLD, CYAN, WHITE, DIM, GREEN, ENTER, ESC
 from suite_menu import SuiteMenu
 from terminal_surface import TerminalSurface
 import campaign_data as content
-from campaign_combat import build_stage, stage_grade, stage_party, solo_readiness
-from casino_route import CasinoRoute
+from campaign_combat import build_stage, stage_grade, stage_party, solo_readiness, operation_unavailable
+from casino_route import CasinoRoute, draw_route_art
 from palace_menu import Timeline, map_screen, brief_frame, transition_frame, airlock
 from campaign_state import DEFAULT_SAVE, Campaign, TestingCampaign, CampaignError
 from persona3_state import DEFAULT_SAVE as DEFAULT_P3_SAVE, distinct_slots
 
-VAULT_WORDS=('RICH','REAP','HUGE','GOLD')
-VAULT_MAP=dict(zip('RICHEAPUGOLD','010293131841'))
 STORY=(
- ('SHUJIN AFTER CLASS','At Shujin, a celebrated coach has made the gym his kingdom. You and Ryuji follow the strange app through the school gate. The tracks vanish behind you.'),
- ('A CASTLE WITH NO EXIT','The school gives way to castle walls. Mona points to a side gate. Take the Treasure at the heart of the distortion and the real Kamoshida may have to answer for what he has done.'),
- ('THE FIRST OPENING','A lantern swings over the patrol. Mona watches the flame bend and points into the wind. Ryuji rolls up his sleeves. Start there, and do not let the sentries call for help.'),
+ ('A NEW SCHOOL','You tried to help a woman on the street. A powerful stranger blamed you, and now you’re in Tokyo on probation, living above Café Leblanc. On your way to Shujin with a new classmate, Ryuji, a strange app picks up the volleyball coach’s name: Kamoshida. A drawbridge rises where the school gate should be.'),
 )
 
 COMMANDS=('Persona','Attack','Gun','Guard','Items','Baton Pass','All-Out Attack','Analyze')
@@ -37,7 +39,7 @@ DRILL=(
     ('SWITCH TO PIXIE','Left and Right cycle masks. Pick Pixie and use Zio.',(),1),
     ('PICK A SHADOW','The W is a known matching weakness. Aim at the Bicorn.',('Lantern   Wind W','Bicorn   Electric W'),2),
     ('ONE MORE!','A new knockdown gives an extra action. Use Baton Pass to extend it.',COMMANDS,6),
-    ('PASS TO MONA','Mona brings Wind to the chain.',('Mona  /  Wind','Skull  /  Electric'),1),
+    ('PASS TO MONA','Pass to a teammate who can knock down a different standing enemy. Mona has Wind.',('Mona  /  Wind','Skull  /  Electric'),1),
     ('OPEN MONA’S SKILLS','Open Mona’s Persona list to use Wind.',COMMANDS,1),
     ('USE GARULA','Garula is a single-target Wind skill.',('Garula   Wind','Magarula   Wind all','Diarama   Heal'),1),
     ('FINISH THE SETUP','Aim at the standing lantern. The Bicorn is already down.',('Lantern   Wind W','Bicorn   DOWN'),1),
@@ -53,19 +55,23 @@ class CampaignApp(TerminalSurface):
         self.page='title';self.testing=False
         self.i=0 if store.status=='ready' else 1
         self.ch=0;self.pick=0;self.node=None;self.marks={}
-        self.notice='';self.cached_trials=None;self.story_view=None
-        self.prologue=0;self.dial=0;self.code='';self.dial_notice=''
+        self.notice='';self.cached_trials=None;self.story_view=None;self.practice_view=None
+        self.prologue=0;bank_vault.reset_dials(self)
         self.grade=None;self.reward=None;self.error=None;self.finished=None
         self.story_visited=False;self.restore_focus=False
-        self.gallery=None;self.gallery_return='title'
+        self.gallery=None
         self.casino_route=None
         self.velvet_started=None
         self.departure=None
         self.back_to_suite=False
         self.palace_timeline=Timeline();self.airlock_started=None
+        self.drill_back='map';self.played_after=False
+        self.story_scene=None;self.scene_destination=None
+        self.scene_checkpoint=None
+        self.escape_fight=None;self.press_console=None;self.lab_route=None;self.field_lessons=set()
 
     def frame(self,title,footer,*,accent=None):
-        self.put(1,2,'◆ TESTING MODE' if self.testing else f'◆ {PRODUCT_TITLE}',GOLD if self.testing else RED,True)
+        self.put(1,2,'◆ BATTLE PRACTICE' if self.testing else f'◆ {PRODUCT_TITLE}',GOLD if self.testing else RED,True)
         self.put(1,max(21,self.w-len(title)-3),title,accent or CYAN,True)
         self.put(2,2,'━'*(self.w-4),accent or RED)
         if isinstance(footer,tuple):
@@ -106,8 +112,7 @@ class CampaignApp(TerminalSurface):
 
     def title_options(self):
         ready=self.story.status=='ready'
-        return [('CONTINUE','',ready),('NEW GAME','',True),('TESTING MODE','',True),
-                ('ANIMATION GALLERY','',True),('QUIT','',True)]
+        return [('CONTINUE','',ready),('NEW GAME','',True),('QUIT','',True)]
 
     def title(self):
         draw_title(self,self.title_options(),self.i,self.notice,back=self.back_to_suite)
@@ -118,10 +123,16 @@ class CampaignApp(TerminalSurface):
 
     def story_panel(self):
         title,body=STORY[self.prologue]
-        self.panel('PROLOGUE / CASTLE',f'{self.prologue+1}/3  ◆  {title}','← BACK  ENTER NEXT  ESC SKIP')
+        self.panel('APRIL / SHUJIN',title,'ENTER SELECT  ESC TITLE')
         self.lines(8,3,body,limit=8)
+        row,col,button,_=self.prologue_button()
+        self.put(row,col,button,CYAN,True,True)
 
-    def start_drill(self):
+    def prologue_button(self):
+        return 16,3,' ▶  CROSS THE DRAWBRIDGE  ','\n'
+
+    def start_drill(self, back='map'):
+        self.drill_back=back
         self.drill=0;self.drill_pick=0;self.drill_mask=0;self.drill_feedback='';self.page='drill'
     def drill_rows(self):
         if self.drill==2:
@@ -132,7 +143,7 @@ class CampaignApp(TerminalSurface):
     def draw_drill(self):
         if self.drill in (0,len(DRILL)+1):
             start=self.drill==0
-            self.frame('FIELD DRILL','↵ BEGIN  ESC SKIP' if start else '↵ MAP')
+            self.frame('FIELD DRILL','↵ BEGIN  ESC SKIP' if start else ('↵ BRIEF' if self.drill_back=='brief' else '↵ MAP'))
             self.mid(6,'PRACTICE BATTLE' if start else 'DRILL COMPLETE',GREEN,True)
             if start:self.lines(9,3,'Learn weaknesses, Baton Pass, and All-Out Attacks without risking your squad.')
             return
@@ -148,7 +159,7 @@ class CampaignApp(TerminalSurface):
         self.lines(19,3,self.drill_feedback,limit=2,color=GOLD)
     def drill_key(self,k):
         if k==ESC or (self.drill==len(DRILL)+1 and k in (*ENTER,' ')):
-            self.page='map';self.notice='';return
+            self.page=self.drill_back;self.notice='';return
         if self.drill==0:
             if k in (*ENTER,' '):self.drill=1
             return
@@ -173,10 +184,187 @@ class CampaignApp(TerminalSurface):
     def draw_map(self):
         map_screen(self,time.monotonic())
 
+    def pass_practice(self):
+        return not self.testing and self.node['id'] in ('spaceport-entry','spaceport-ranks')
+
+    def story_offer(self,phase,node_id=None):
+        if self.testing:return None
+        return campaign_story.story_offer(node_id or self.node['id'],phase,
+                           seen_clues=self.store.data.get('story_clues',()))
+
+    def open_story_scene(self,scene,destination,*,checkpoint=None,beat=None):
+        self.story_scene=campaign_story.StoryScene(scene,seen_clues=self.store.data.get('story_clues',()),
+                                                   suspendable=checkpoint is not None)
+        if beat is not None:self.story_scene.beat=beat
+        self.scene_destination=destination
+        self.scene_checkpoint=checkpoint
+        self.notice='';self.page='story-scene'
+
+    def key_story_scene(self,k):
+        scene=self.story_scene
+        previous=scene.beat
+        close=scene.key(k)
+        if getattr(scene,'requested_transition',None)==first_escape.FIGHT:
+            scene.requested_transition=None
+            if self.save_opening('infiltration:fight'):self.start_escape_fight()
+            return
+        clues=scene.clues.difference(self.store.data.get('story_clues',()))
+        if clues:
+            try:self.store.remember_clues(clues)
+            except (CampaignError,ValueError,OSError) as exc:
+                self.notice='Clue not saved: '+str(exc)
+        checkpoint=self.scene_checkpoint
+        if checkpoint=='opening' and not scene.suspended and (scene.beat!=previous or close):
+            phase='casino' if scene.scene_id==campaign_story.COLD_OPEN else 'infiltration'
+            step=('april:0' if phase=='casino' else None) if close else phase+':'+scene.beat
+            if not self.save_opening(step):
+                scene.beat=previous
+                return
+        if not close:return
+        destination=self.scene_destination
+        recruit=None
+        if checkpoint not in (None,'opening') and not scene.suspended:
+            try:self.store.finish_pending_story(checkpoint)
+            except (CampaignError,ValueError,OSError) as exc:
+                self.notice='Story checkpoint not saved: '+str(exc);return
+            recruit=campaign_story.RECRUIT_HANDOFFS.get(checkpoint)
+        self.scene_destination=None;self.story_scene=None;self.scene_checkpoint=None
+        if scene.suspended:
+            self.leave_map();return
+        if checkpoint=='laboratory-choice' and self.campaign_complete():
+            self.page='campaign-complete';self.i=0
+        elif destination=='deploy':
+            if scene.cancelled:self.page='brief'
+            else:self.enter_operation()
+        else:
+            if destination=='result':self.played_after=True
+            if destination=='resume-map':self.focus_campaign_map()
+            else:self.page=destination
+        if recruit:
+            active=recruit in self.store.data['squad']
+            self.notice=f'{recruit} joined your roster • '+('Active' if active else 'Standby')
+        elif checkpoint=='pyramid-boss':
+            self.notice='Oracle available • Moral Support, UFO Finisher'
+
+    def start_escape_fight(self):
+        self.story_scene=None;self.scene_destination=None;self.scene_checkpoint=None
+        self.escape_fight=first_escape.EscapeFight(self.seed)
+        self.notice='';self.page='escape-fight'
+
+    def key_escape_fight(self,k):
+        fight=self.escape_fight
+        if k==C.KEY_MOUSE:
+            k=campaign_story.clicked_story_button(fight.buttons(self.w))
+            if k is None:return
+        if k==ESC:self.leave_map();return
+        if fight.battle.phase=='win':
+            if k in ENTER and self.save_opening('infiltration:'+first_escape.RETURN_BEAT):
+                self.open_story_scene(first_escape.SCENE_ID,'map',checkpoint='opening',beat=first_escape.RETURN_BEAT)
+            return
+        if fight.battle.phase=='loss':
+            if k in ENTER:self.start_escape_fight()
+            return
+        fight.pick=self.nav(k,fight.pick,2)
+        choose=self.commit(k,fight.pick,2)
+        if choose is not None:
+            fight.pick=choose
+            if fight.act(('attack','guard')[choose])=='win':
+                self.save_opening('infiltration:'+first_escape.RETURN_BEAT)
+
+    def save_opening(self,step):
+        try:return self.store.checkpoint_opening(step)
+        except (CampaignError,ValueError,OSError) as exc:
+            self.notice='Opening checkpoint not saved: '+str(exc);return False
+
+    def focus_campaign_map(self):
+        if not self.restore_focus or self.ch>=self.opened():self.ch=self.opened()-1;self.pick=self.near()
+        self.restore_focus=False;self.story_visited=True
+        bank_vault.reset_dials(self)
+        self.notice='CAMPAIGN SAVE LOADED';self.page='map'
+
+    def resume_campaign_story(self):
+        data=self.store.data
+        if step:=data.get('story_opening'):
+            phase, beat=step.split(':',1)
+            if phase=='casino':
+                self.prologue=0
+                self.open_story_scene(campaign_story.COLD_OPEN,'prologue',checkpoint='opening',beat=beat)
+            elif phase=='infiltration':
+                if beat=='fight':self.start_escape_fight()
+                else:self.open_story_scene(first_escape.SCENE_ID,'map',checkpoint='opening',beat=beat)
+            else:
+                self.prologue=0;self.page='prologue';self.notice=''
+            return True
+        if (pending:=data.get('pending_story_after')) and (offer:=self.story_offer('after',pending)):
+            self.open_story_scene(offer,'resume-map',checkpoint=pending)
+            return True
+        if self.campaign_complete():
+            self.page='campaign-complete';self.i=0;self.notice=''
+            return True
+        return False
+
+    def campaign_complete(self):
+        data=self.store.data
+        return not self.testing and len(data['cleared'])==len(self.by_id) and not data.get('pending_story_after')
+
+    def draw_campaign_complete(self):
+        self.panel('STORY','CAMPAIGN COMPLETE','↑↓ SELECT  ENTER SELECT  ESC TITLE')
+        self.lines(8,3,f'All {len(self.by_id)} operations are clear. Your roster and medals are saved.',limit=2)
+        self._b_list((('Return to Title','',True),('Replay Operations','',True)),
+                     13,3,self.w-6,2,self.i,details=False)
+
+    def open_trials(self):
+        if self.cached_trials is None:self.battle_init()
+        else:self.__dict__.update(self.cached_trials)
+        self.page='trials'
+
+    def pending_after(self):
+        if self.testing or self.node is None:return None
+        pending=self.store.data.get('pending_story_after')
+        return pending if pending==self.node['id'] else None
+
+    def open_after(self,offer):
+        self.open_story_scene(offer,'result',checkpoint=self.pending_after())
+
+    def after_scene(self):
+        if (not self.first or self.error or self.played_after):return None
+        return self.story_offer('after')
+
+    def deploy(self):
+        self.lab_route=None
+        offer=(None if self.node['id'] in self.store.data['cleared'] else self.story_offer('before'))
+        if offer:self.open_story_scene(offer,'deploy')
+        else:self.enter_operation()
+
+    def enter_operation(self):
+        if self.node.get('press_console'):
+            self.press_console=PressConsole();self.page='spaceport-press';self.notice=''
+        elif room:=self.node.get('lab_room'):
+            self.lab_route=LabInfiltration(self.node['id'],room);self.page='lab-route';self.notice=''
+        else:self.stage()
+
+    def deployment_label(self):
+        if self.dials_required():return 'DIALS'
+        if self.node.get('press_console'):return 'CONSOLE'
+        if room:=self.node.get('lab_room'):return lab_entry_label(room)
+        return 'DEPLOY'
+
+    def briefing_story(self):
+        review=self.story_offer('review')
+        if review:return review,'REVIEW CLUE'
+        if not self.testing and self.node['id'] in self.store.data['cleared']:
+            if self.node['id']=='pyramid-murals':
+                return self.story_offer('before'),'REVISIT MURAL'
+            if story:=self.story_offer('after'):
+                return story,'REVISIT STORY'
+        return None,''
+
     def brief(self):
         n=self.node
+        scene,caption=self.briefing_story()
         skin=brief_frame(self,self.chapters[self.ch]['id'],'◆ '+n['title'].upper(),
-                   ('ENTER DIALS' if self.dials_required() else 'ENTER DEPLOY')+'  ESC MAP  S SQUAD  V VELVET')
+                   'ENTER '+self.deployment_label()+'  ESC MAP  S SQUAD  V VELVET'+('  H BATON DRILL' if self.pass_practice() else '')+
+                   ('  C '+caption if scene else ''))
         self.lines(6,3,(not self.testing and n.get('story_before')) or n.get('brief',''),limit=4)
         self.put(10,3,(f'WAVES: {len(n["waves"])}   /   SQUAD: '+', '.join(['Joker',*stage_party(self.store,n)]))[:self.w-6],
                  skin.accent,True)
@@ -190,44 +378,44 @@ class CampaignApp(TerminalSurface):
         return (not self.testing and self.node['id']=='bank-vault' and self.dial<len(VAULT_WORDS)
                 and 'bank-vault' not in self.store.data['cleared'])
     def draw_dials(self):
-        word=VAULT_WORDS[self.dial]
-        self.panel('BANK / VAULT DIALS',f'◆ LOCK {self.dial+1}/4  /  {word}',
-                   '0–9 SET DIALS  BACKSPACE EDIT  ENTER TURN  ESC BACK')
-        self.lines(6,3,'Translate the lock word from left to right using Kaneshiro’s journal.')
-        pairs=tuple(VAULT_MAP.items())
-        for j in range(2):self.put(10+j,3,'   '.join(a+'='+b for a,b in pairs[j*6:(j+1)*6]),CYAN)
-        self.mid(15,'   '.join('['+x+']' for x in self.code.ljust(4,'_')),WHITE,True)
-        self.lines(19,3,self.dial_notice,limit=2,color=GOLD)
+        bank_vault.draw_dials(self)
     def key_dials(self,k):
-        if k==ESC:self.code='';self.dial_notice='';self.page='brief'
-        elif k in (C.KEY_BACKSPACE,chr(127),chr(8)):self.code=self.code[:-1];self.dial_notice=''
-        elif isinstance(k,str) and len(k)==1 and k in '0123456789':
-            self.code=(self.code+k)[:4];self.dial_notice=''
-        elif k in ENTER:
-            code=''.join(VAULT_MAP[x] for x in VAULT_WORDS[self.dial])
-            if len(self.code)<4:self.dial_notice='Set all four digits before turning the lock.'
-            elif self.code!=code:self.code='';self.dial_notice='That lock did not turn. Check the notebook.'
-            else:
-                self.dial+=1;self.code='';self.dial_notice=''
-                if self.dial==4:self.page='brief';self.notice='DIALS OPEN'
+        bank_vault.key_dials(self,k)
 
     def open_squad(self,back):
         self.back=back;self.edit=list(self.store.data['squad']);self.i=0;self.page='squad';self.notice=''
+    def squad_operation(self):
+        return self.node if self.back in ('brief','result') else None
+
+    def squad_names(self):
+        data=self.store.data
+        pending=campaign_story.RECRUIT_HANDOFFS.get(data.get('pending_story_after'))
+        return ['Joker',*(n for n in TEAM if n!='Joker' and
+                          (self.testing or (n in data['teammates'] and n!=pending)))]
+
     def draw_squad(self):
-        d=self.store.data;names=['Joker',*TEAM]
-        self.panel('PALACE / SQUAD',f'◆ TEAM CONFIG  /  {len(self.edit)}/{d["squad_slots"]} ALLIES + JOKER',
+        d=self.store.data;names=self.squad_names()
+        op=self.squad_operation()
+        deployed=sum(name in names and not operation_unavailable(op,name) for name in self.edit)
+        label='DEPLOY' if op else 'ALLIES'
+        self.panel('PALACE / SQUAD',f'◆ {deployed}/{d["squad_slots"]} {label} + JOKER',
                    '↑↓ SELECT  ENTER TOGGLE  S APPLY SQUAD  ESC BACK')
         rows=[]
         for n in names:
             own=n=='Joker' or n in d['teammates']
-            mark='●' if n=='Joker' or n in self.edit else '○' if own else '▣'
-            rows.append((f'{mark} {n}  /  '+('Wild Card lead' if n=='Joker' else TEAM[n]['role']),'',own))
+            restricted=own and operation_unavailable(op,n)
+            mark='⊘' if restricted else '●' if n=='Joker' or n in self.edit else '○' if own else '▣'
+            role='Not on this operation' if restricted else 'Wild Card lead' if n=='Joker' else TEAM[n]['role']
+            rows.append((f'{mark} {n}  /  '+role,'',own and not restricted))
         self._b_list(rows,6,3,self.w-6,9,self.i)
         n=names[self.i]
         if n=='Joker':
             if d['joker_hp'] or d['joker_sp']:
                 self.put(17,3,f'+{d["joker_hp"]} HP  /  +{d["joker_sp"]} SP',CYAN)
         elif n in d['teammates']:
+            if operation_unavailable(op,n):
+                self.put(17,3,'Saved roster: '+('selected' if n in self.edit else 'standby')+'.',DIM)
+                return
             self.put(17,3,f'{TEAM[n]["hp"]} HP  /  {TEAM[n]["sp"]} SP',CYAN)
             if d['team_skills'].get(n):
                 self.lines(18,3,'Learned: '+', '.join(d['team_skills'][n]),limit=2,color=DIM)
@@ -236,12 +424,13 @@ class CampaignApp(TerminalSurface):
     def stage(self):
         try:b=build_stage(self.store,self.node['id'],self.seed)
         except (CampaignError,ValueError) as exc:self.notice='BLOCKED • '+str(exc);self.page='brief';return
+        if self.lab_route is not None and self.lab_route.node_id==self.node['id']:self.lab_route.prepare(b)
         self.battle_init();self._b_battle=b
         self.casino_route=CasinoRoute() if self.node.get('wave_breaks') else None
         self._b_personas=getattr(b,'personas',self._b_personas);self._b_screen='command'
         self._b_prepare_presentation(b,time.monotonic())
         self.finished=None;self.reward=None;self.error=None;self.grade=None;self.first=False
-        self.notice='';self.page='battle'
+        self.notice='';self.page='battle';self.played_after=False
         self.airlock_started=time.monotonic() if self.node['id'].startswith('spaceport-') else None
 
     def draw_casino_route(self):
@@ -253,6 +442,7 @@ class CampaignApp(TerminalSurface):
         heading={'dice':'DICE CONTROL ROOM','slots':'GIANT SLOT',
                  'darkness':'HOUSE OF DARKNESS','bridge':'BRIDGE OF JUDGMENT'}[route.stage]
         self.panel('CASINO / INFILTRATION',heading,'↑↓ SELECT  ↵ ACT  ESC LEAVE ATTEMPT')
+        draw_route_art(self,route)
         if route.stage in ('dice','slots'):
             self.put(6,3,f'COINS  {route.coins:,}',GOLD,True)
         if route.stage=='bridge':
@@ -300,8 +490,12 @@ class CampaignApp(TerminalSurface):
         self.first=self.node['id'] not in self.store.data['cleared']
         try:
             contract={'contract': b.contract} if getattr(b,'contract',None) is not None else {}
+            if self.node['id'] in campaign_story.REQUIRED_AFTER:contract['queue_story']=True
+            if updates:=getattr(b,'affinity_updates',None):contract['affinity_updates']=updates
+            prior=self.store.data['squad']
             self.reward=self.store.clear(self.node['id'],self.grade,**contract);self.error=None
-            self.notice='AUTOSAVED  /  '+('FIRST CLEAR' if self.first else 'BEST MEDAL KEPT')
+            self.activated=[name for name in self.store.data['squad'] if name not in prior]
+            self.notice='AUTOSAVED  /  '+('FIRST CLEAR' if self.first else 'PERSONA REGISTERED' if self.reward else 'BEST MEDAL KEPT')
         except (CampaignError,ValueError,OSError) as exc:
             self.error=str(exc);self.notice='BLOCKED • Progress has not been saved.'
     def draw_combat(self):
@@ -311,8 +505,10 @@ class CampaignApp(TerminalSurface):
             self.lines(9,3,'This attempt ends. An unfinished fight does not change campaign progress.')
             return
         self.record()
+
         now=time.monotonic()
-        if self._b_battle.phase=='interlude' and not self._b_result_animation(now):
+        if (self._b_battle.phase=='interlude'
+                and not self._b_result_animation(now)):
             self.casino_route.open(self._b_battle.interlude)
             self.page='casino-route';self.draw_casino_route();return
         if (self.finished is not None and self._b_overlay is None and now-self.finished>=.68
@@ -322,6 +518,18 @@ class CampaignApp(TerminalSurface):
         if self.airlock_started is not None and self._b_overlay is None and not self._b_cut_in:
             airlock(self,now-self.airlock_started)
         self.record()
+
+    def field_lesson(self):
+        if self.testing or self.ch!=0:return
+        b=self._b_battle
+        if b.phase!='turn' or not b.one_more:return
+        if b.hold_up and 'allout' not in self.field_lessons:
+            b._say('All Shadows are down. Try an All-Out Attack.')
+            self.field_lessons.add('allout')
+        elif not b.hold_up and 'baton' not in self.field_lessons and b.actions('baton'):
+            b._say('Baton Pass hands this extra action to an ally.')
+            self.field_lessons.add('baton')
+
     def chapter_final(self):
         return self.node['id']==self.nodes()[-1]['id'] and all(n['id'] in self.store.data['cleared'] for n in self.nodes())
     def new_chapter(self):
@@ -331,17 +539,27 @@ class CampaignApp(TerminalSurface):
         if self.testing:title='PRACTICE WIN' if win else 'PRACTICE DEFEAT'
         else:title=(self.label()+' SECURED' if self.chapter_final() else 'OPERATION CLEARED') if win else 'SQUAD DEFEATED'
         footer=('ENTER RETRY SAVE  ESC LEAVE' if self.error else
-                'ENTER RETRY  L LOG  ESC MAP' if not win else
-                (f'↵ {self.label(self.ch+1)}  ' if self.new_chapter() else '')+'R REPLAY  L LOG  S SQUAD  V CARDS  ESC MAP')
+                'ENTER RETRY  A ADJUST LEAD  L LOG  ESC MAP' if not win else
+                ('↵ STORY  ' if self.after_scene() else f'↵ {self.label(self.ch+1)}  ' if self.new_chapter() else '↵ MAP  ')+
+                ('L LOG  S SQUAD  V CARDS  ESC TITLE' if self.pending_after() else 'R REPLAY  L LOG  S SQUAD  V CARDS  ESC MAP'))
         self.panel('PALACE / DEBRIEF','◆ '+title+'  //  '+self.node['title'].upper(),footer)
         if win:
             self.put(7,3,('PRACTICE MEDAL  ' if self.testing else 'MEDAL  ')+str(self.grade),GOLD,True)
             self.put(8,3,'S: all standing at 50%+ HP  A: ¾+ standing  B: otherwise',DIM)
         if self.error:self.lines(10,3,self.error,limit=4,color=RED);return
-        if self.testing or not win:return
+        if not win:
+            diagnose=getattr(self._b_battle,'defeat_diagnosis',None)
+            summary=diagnose() if diagnose else ()
+            if not summary:
+                fallback=getattr(self._b_battle,'loss_summary',lambda:'')()
+                summary=(fallback,) if fallback else ()
+            for i,detail in enumerate(summary[:2]):
+                self.lines(8+i*3,3,detail,limit=2,color=GOLD if i==0 else DIM)
+            return
+        if self.testing:return
         y=10
         if self.reward:
-            self.put(y,3,'FIRST-CLEAR REWARDS',CYAN,True);y+=1
+            self.put(y,3,'FIRST-CLEAR REWARDS' if self.first else 'REPLAY REWARDS',CYAN,True);y+=1
             for field,label in (('credits','Credits'),('joker_hp','Joker HP'),('joker_sp','Joker SP'),('slots','Mask slots'),('squad_slots','Ally slots'),
                                 ('teammates','Recruited'),('personas','Registered'),('skill_cards','Skill cards'),('oracle','Support')):
                 v=self.reward.get(field)
@@ -349,13 +567,55 @@ class CampaignApp(TerminalSurface):
                     names={'support':'Moral Support','ufo':'UFO Finisher'}
                     v=tuple(names[item] for item in v if item in ACTIVE_ORACLE_FEATURES)
                 if v:
+                    if field=='teammates':
+                        for name in v:
+                            state='active' if name in self.store.data['squad'] else 'standby'
+                            self.put(y,3,f'◆ {label}: {name} • {state}',WHITE);y+=1
+                        continue
+                    if field=='squad_slots':
+                        added=[n for n in getattr(self,'activated',()) if n not in self.reward.get('teammates',())]
+                        if added: label+=' (active: '+', '.join(added)+')'
                     self.put(y,3,f'◆ {label}: '+(', '.join(v) if isinstance(v,(list,tuple)) else '+'+str(v)),WHITE);y+=1
             for name,moves in self.reward.get('team_skills',{}).items():
                 self.put(y,3,f'◆ {name} learned '+', '.join(moves),WHITE);y+=1
         if self.first and self.node.get('story_after') and y+1<self.h-5:
             self.lines(y+1,3,self.node['story_after'],limit=min(4,self.h-6-y),color=DIM)
-        if self.new_chapter():self.put(self.h-5,3,'NEW PALACE UNLOCKED  /  '+self.label(self.ch+1),GREEN,True)
-        elif self.chapter_final():self.lines(self.h-5,3,self.chapters[self.ch].get('completion','Palace secured.'),limit=1,color=GREEN)
+        if not self.pending_after():
+            if self.new_chapter():self.put(self.h-5,3,'NEW PALACE UNLOCKED  /  '+self.label(self.ch+1),GREEN,True)
+            elif self.chapter_final():self.lines(self.h-5,3,self.chapters[self.ch].get('completion','Palace secured.'),limit=1,color=GREEN)
+
+    def lead_choices(self):
+        d=self.store.data
+        return [d['primary'],*(name for name in d['stock'] if name!=d['primary'])]
+
+    def draw_adjust_lead(self):
+        d=self.store.data; choices=self.lead_choices(); name=choices[self.lead_pick]
+        self.panel('PALACE / ADJUST LEAD','◆ STARTING PERSONA',
+                   '↑↓ SELECT  ENTER APPLY  ESC CANCEL')
+        self._b_list([(n,'Current' if n==d['primary'] else 'Carried' if n in d['loadout'] else 'In stock',
+                       True) for n in choices],6,3,self.w-6,8,self.lead_pick,shortcut=False)
+        spec=self.store.persona_spec(name)
+        weak=', '.join(e for e,a in spec['affinity'].items() if a=='weak') or 'none'
+        self.lines(16,3,f'{name} weaknesses: {weak}',limit=2,color=CYAN)
+        availability=('Current lead' if name==d['primary'] else 'Already carried'
+                      if name in d['loadout'] else 'In stock • not equipped')
+        self.put(15,3,availability,DIM)
+        if name not in d['loadout'] and len(d['loadout'])>=d['slots']:
+            self.lines(19,3,f'{name} will take {d["primary"]}’s slot.',limit=2,color=GOLD)
+
+    def key_adjust_lead(self,k):
+        if k==ESC:self.page='result';self.notice='';return
+        choices=self.lead_choices()
+        self.lead_pick=self.nav(k,self.lead_pick,len(choices))
+        if k not in ENTER:return
+        d=self.store.data; name=choices[self.lead_pick]
+        if name==d['primary']:self.page='result';return
+        loadout=list(d['loadout'])
+        if name not in loadout:
+            if len(loadout)>=d['slots']:loadout[loadout.index(d['primary'])]=name
+            else:loadout.append(name)
+        if self.transact(lambda:self.store.equip_personas(loadout,name),'LEAD: '+name)[0]:
+            self.page='result'
 
     def open_velvet(self,back,compendium=False):
         self.back=back;self.velvet_parent=None
@@ -378,7 +638,10 @@ class CampaignApp(TerminalSurface):
         velvet_menu.panel(self,room,heading,footer,practice=self.velvet_parent is not None)
     def draw_velvet(self):
         d=self.store.data;names=self.velvet_names()
-        footer=('←→ TAB  ↑↓ PICK  E EQUIP  P LEAD  A CARD  S APPLY  ESC'
+        name=names[self.i] if names else None
+        archived=self.tab and name not in d['stock']
+        footer=(('←→ TAB  ↑↓ PICK  ENTER RESUMMON  ESC BACK' if archived
+                 else '←→ TAB  ↑↓ PICK  E EQUIP  P LEAD  A CARD  S APPLY  ESC')
                 if self.tab else '←→ TAB  ↑↓ PICK  ENTER PREVIEW  X PRACTICE  ESC BACK'
                 if self.testing and self.velvet_parent is None
                 else '←→ TAB  ↑↓ PICK  ENTER PREVIEW  ESC BACK')
@@ -389,8 +652,9 @@ class CampaignApp(TerminalSurface):
         rows=[]
         for name in names:
             if self.tab:
-                mark='★' if name==self.primary else '●' if name in self.mask_edit else '○'
-                rows.append((f'{mark} {name}',True))
+                in_stock=name in d['stock']
+                mark='★' if name==self.primary else '●' if name in self.mask_edit else '○' if in_stock else '·'
+                rows.append((f'{mark} {name}',in_stock))
             else:
                 f=self.store.fusion_options(name);r=f['recipe']
                 mark='▣' if not f['available'] else '↻' if f['registered'] else '◆'
@@ -400,7 +664,9 @@ class CampaignApp(TerminalSurface):
         self.put(6,x,name[:width],CYAN,True)
         if self.tab:
             spec=self.store.persona_spec(name)
-            self.put(8,x,f'{len(self.mask_edit)}/{d["slots"]} active  •  ★ lead',velvet_menu.STEEL)
+            status=(f'Archived • {self.store.summon_preview(name)["cost"]} cr to summon' if archived
+                    else f'{len(self.mask_edit)}/{d["slots"]} equipped  •  ★ lead')
+            self.lines(8,x,status,width=width,limit=2,color=velvet_menu.STEEL)
             self.lines(10,x,', '.join(spec['skills']),width=width,limit=4)
             affinities=', '.join(f'{a} {v}' for a,v in spec['affinity'].items()) or 'Normal'
             self.lines(15,x,'Defense: '+affinities,width=width,limit=4,color=DIM)
@@ -408,7 +674,7 @@ class CampaignApp(TerminalSurface):
             f=self.store.fusion_options(name)
             self.lines(8,x,' + '.join(f['recipe']['parents']),width=width,limit=2)
             if f['reason']:self.lines(11,x,f['reason'],width=width,limit=4,color=DIM)
-            elif f['registered']:self.lines(11,x,'Registered. Re-fusion adjusts its inherited skill.',width=width,limit=4,color=DIM)
+            elif f['registered']:self.lines(11,x,'Already registered. Re-fusion can change its inherited skill.',width=width,limit=4,color=DIM)
     def donor_options(self):
         return [(None,None)]+[(n,k) for n,skills in self.fusion['donors'].items() for k in skills]
     def _fusion_selection(self):
@@ -421,96 +687,105 @@ class CampaignApp(TerminalSurface):
     def draw_fusion(self):
         name,skill,donor=self._fusion_selection()
         f=self.store.fusion_preview(name,skill,donor);r=f['recipe']
-        verb='REVIEW RE-FUSION' if f['registered'] else 'FUSE'
-        self._velvet_chrome('FUSION PREVIEW','◆ '+' + '.join(r['parents'])+'  →  '+name,
-                   '↑↓ INHERITANCE  F '+verb+'  ESC BACK')
+        footer=('↑↓ INHERITANCE  ENTER REVIEW  ESC BACK' if f['available']
+                else '↑↓ INHERITANCE  ESC BACK')
+        self._velvet_chrome('FUSION PREVIEW',' + '.join(r['parents'])+'  →  '+name,footer)
         self.put(6,3,self._fusion_price(r),CYAN)
-        self.lines(7,3,'Base: '+', '.join(content.PERSONA_DATA[name]['skills']),limit=2,color=DIM)
-        self.put(9,3,'PARENTS STAY REGISTERED',GOLD,True)
-        velvet_menu.selector(self,[((k+' ← '+n) if k else 'No inherited skill',True) for n,k in self.donor_options()],10,3,self.w-7,7,self.sub)
-        if f['reason']:self.lines(18,3,f['reason'],limit=2,color=GOLD)
-        elif f['registered']:
-            self.lines(18,3,'Gain: '+(', '.join(f['gains']) or 'none')+
-                       '  /  Lose: '+(', '.join(f['losses']) or 'none'),limit=2,color=GOLD)
-        else:
-            if skill:self.lines(18,3,'Inherit: '+skill,limit=1,color=GOLD)
-            defense=', '.join(f'{e} {v}' for e,v in content.PERSONA_DATA[name]['affinity'].items()) or 'Normal'
-            self.lines(19,3,'Defense: '+defense,limit=2,color=DIM)
-    def draw_refuse(self):
+        self.put(8,3,'Both parents leave stock but stay in the Compendium.',GOLD)
+        velvet_menu.selector(self,[((k+' ← '+n) if k else 'No inherited skill',True)
+                                   for n,k in self.donor_options()],10,3,self.w-7,7,self.sub)
+        self.lines(18,3,f['reason'] or 'Result skills: '+', '.join(f['after']),
+                   limit=2,color=GOLD if f['reason'] else DIM)
+    def draw_fusion_confirm(self):
         name,skill,donor=self._fusion_selection()
         f=self.store.fusion_preview(name,skill,donor)
-        self._velvet_chrome('RE-FUSION','◆ REVISE '+name.upper(),
-                   'ENTER CONFIRM RE-FUSION  ESC CANCEL')
+        verb='RE-FUSE ' if f['registered'] else 'FUSE '
+        self._velvet_chrome('CONFIRM FUSION','◆ '+verb+name.upper(),
+                           'ENTER CONFIRM FUSION  ESC CANCEL')
         self.put(6,3,self._fusion_price(f['recipe']),CYAN)
-        self.put(8,3,'Gain: '+(', '.join(f['gains']) or 'none'),GREEN)
-        self.put(9,3,'Lose: '+(', '.join(f['losses']) or 'none'),GOLD)
-        if f['preserved']:
-            self.lines(11,3,'Keep learned skills: '+', '.join(f['preserved']),limit=3,color=DIM)
-        self.lines(15,3,'Loadout, lead and parents stay unchanged.',limit=2,color=DIM)
-    def draw_registered(self):
-        d=self.store.data
-        self._velvet_chrome('REGISTERED','◆ '+self.fused.upper()+' IS REGISTERED','E EQUIP NOW  ESC KEEP REGISTERED')
-        if len(d['loadout'])>=d['slots']:self.lines(7,3,'Your loadout is full. Equipping this Persona requires a swap.')
-    def draw_replace(self):
-        d=self.store.data;n=d['loadout'][self.sub]
-        self._velvet_chrome('EQUIP SWAP','◆ EQUIP '+self.fused.upper(),'↑↓ SELECT  ENTER CONFIRM REPLACEMENT  ESC CANCEL')
-        velvet_menu.selector(self,[(a,True) for a in d['loadout']],7,3,self.w-7,5,self.sub)
-        self.lines(13,3,f'Replace {n} with {self.fused}.',limit=1)
-        if n==d['primary']:self.lines(14,3,self.fused+' becomes the starting Persona.',limit=1,color=GOLD)
-        old,new=(self.store.persona_spec(name) for name in (n,self.fused))
-        gains=[move for move in new['skills'] if move not in old['skills']]
-        losses=[move for move in old['skills'] if move not in new['skills']]
-        self.lines(15,3,'Gain: '+(', '.join(gains) or 'none'),limit=2,color=DIM)
-        self.lines(17,3,'Lose: '+(', '.join(losses) or 'none'),limit=2,color=DIM)
-        from battle_data import ELEMENTS
-        before,after=old['affinity'],new['affinity']
-        changes=[e+' '+before.get(e,'normal')+'→'+after.get(e,'normal') for e in ELEMENTS
-                 if before.get(e,'normal')!=after.get(e,'normal')]
-        self.lines(19,3,'Defense: '+(', '.join(changes) or 'no change'),limit=2,color=DIM)
-    def equip_fusion(self,old=None):
-        d=self.store.data;names=list(d['loadout']);primary=d['primary']
-        if old is None:names.append(self.fused)
-        else:
-            names[names.index(old)]=self.fused
-            if primary==old:primary=self.fused
-        if self.transact(lambda:self.store.equip_personas(names,primary),'EQUIPPED '+self.fused)[0]:
-            self.mask_edit=names;self.primary=primary;self.tab=1
-            self.i=self.velvet_names().index(self.fused);self.page='velvet'
+        self.lines(8,3,'Consume: '+', '.join(f['consumed']),limit=2,color=GOLD)
+        self.put(10,3,'Parents stay in the Compendium.',DIM)
+        self.lines(12,3,'Result skills: '+', '.join(f['after']),limit=2)
+        if f['losses']:
+            self.lines(14,3,'Replaces: '+', '.join(f['losses']),limit=1,color=GOLD)
+        self.lines(15,3,'Equipped after fusion: '+', '.join(f['loadout']),limit=3,color=CYAN)
+        self.put(18,3,'Lead: '+f['lead'],CYAN)
+        if f['lead']!=self.store.data['primary'] or f['lead']==name:
+            defenses=content.PERSONA_DATA[name]['affinity']
+            weak=', '.join(e for e,effect in defenses.items() if effect=='weak') or 'none'
+            self.lines(19,3,'Lead weaknesses: '+weak,limit=2,color=GOLD)
+    def draw_summon(self):
+        name=self.velvet_names()[self.i];preview=self.store.summon_preview(name)
+        self._velvet_chrome('COMPENDIUM','◆ RESUMMON '+name.upper(),
+                           'ENTER CONFIRM  ESC CANCEL' if preview['available'] else 'ESC BACK')
+        self.put(6,3,self._fusion_price(preview),CYAN)
+        self.lines(8,3,'Return to stock with: '+', '.join(self.store.persona_spec(name)['skills']),limit=3)
+        if preview['reason']:self.put(12,3,preview['reason'],GOLD)
     def draw_cards(self):
         name=self.velvet_names()[self.i]
-        self._velvet_chrome('SKILL CARDS','◆ APPLY A CARD TO '+name.upper(),'↑↓ SELECT  ENTER APPLY ONE CARD  ESC CANCEL')
         cards=self.store.data['skill_cards']
+        skill=list(cards)[self.sub] if cards else None
+        reason=self.store.skill_card_block(name,skill) if skill else ''
+        footer='↑↓ SELECT  ENTER APPLY ONE CARD  ESC CANCEL' if skill and not reason else '↑↓ SELECT  ESC BACK'
+        self._velvet_chrome('SKILL CARDS','◆ APPLY A CARD TO '+name.upper(),footer)
         if not cards:self.put(7,3,'No skill cards found.',DIM)
-        else:velvet_menu.selector(self,[(f'{k} ×{v}',True) for k,v in cards.items()],6,3,self.w-7,self.h-12,self.sub)
+        else:
+            rows=[]
+            for card,count in cards.items():
+                blocked=bool(self.store.skill_card_block(name,card))
+                rows.append((f'{card} ×{count}'+(' [UNAVAILABLE]' if blocked else ''),not blocked))
+            velvet_menu.selector(self,rows,6,3,self.w-7,self.h-13,self.sub)
+            self.lines(self.h-7,3,velvet_menu.card_description(skill),limit=1,color=CYAN)
+            if reason:self.lines(self.h-6,3,reason,limit=2,color=GOLD)
 
     def start_story(self):
-        ok,backup=self.transact(self.story.new_game,'NEW CAMPAIGN')
+        ok,backup=self.transact(lambda:self.story.new_game(opening=True),'NEW CAMPAIGN')
         if not ok:return
         if backup:self.notice+='  •  Previous save backed up.'
-        self.ch=self.pick=self.prologue=self.dial=0;self.code=self.dial_notice='';self.marks={}
-        self.cached_trials=None;self.story_visited=True;self.restore_focus=False;self.page='prologue'
+        self.ch=self.pick=self.prologue=0;bank_vault.reset_dials(self);self.marks={}
+        self.cached_trials=None;self.story_visited=True;self.restore_focus=False;self.page='prologue';self.field_lessons.clear()
+        self.resume_campaign_story()
     def start_testing(self):
-        try:new=TestingCampaign()
-        except (CampaignError,ValueError) as exc:self.notice='BLOCKED • '+str(exc);return
         self.story_view=(self.ch,self.pick,self.marks,self.node,self.cached_trials)
-        self.testing=True;self.store=new;self.ch=self.pick=0
-        self.marks={};self.node=None;self.cached_trials=None
-        self.notice='';self.page='map'
+        if self.practice_view is None:
+            self.store=TestingCampaign()
+            self.ch=self.pick=0
+            self.marks={};self.cached_trials=None
+        else:
+            self.store,self.ch,self.pick,self.marks,self.cached_trials=self.practice_view
+        self.testing=True;self.node=None;self.notice='';self.page='map'
+
     def leave_map(self):
         if self.testing:
+            self.practice_view=(self.store,self.ch,self.pick,self.marks,self.cached_trials)
             self.ch,self.pick,self.marks,self.node,self.cached_trials=self.story_view
             self.store=self.story;self.testing=False;self.story_view=None
-            self.notice=''
             self.restore_focus=self.story_visited
-        else:self.notice=''
+        self.notice=''
         self.i=0 if self.story.status=='ready' else 1;self.page='title'
+
     def leave_result(self):
         self.page='map'
         if not self.testing:self.pick=self.near()
 
-    def open_gallery(self,return_to):
-        if self.gallery is None:self.gallery=AnimationGallery()
-        self.gallery_return=return_to;self.page='gallery'
+    def begin_extra(self,kind):
+        if kind=='practice':
+            self.start_testing()
+        elif kind=='gallery':
+            if self.gallery is None:self.gallery=AnimationGallery()
+            self.notice='';self.page='gallery'
+        else:raise ValueError(f'Unknown Persona 5 extra: {kind!r}')
+
+    def run_extra(self,kind):
+        """Open an Extras leaf without startup or a writable practice save."""
+        self.begin_extra(kind)
+        try:
+            self.run(startup=False)
+        finally:
+            if self.testing:self.leave_map()
+            elif self.page=='gallery':
+                self.gallery.stop()
+                self.page='title'
 
     def draw_departure(self):
         destination,unsaved=self.departure
@@ -556,31 +831,39 @@ class CampaignApp(TerminalSurface):
             if choose==0:
                 status=self.story.reload()
                 if self.story.status=='ready':
-                    if not self.restore_focus or self.ch>=self.opened():self.ch=self.opened()-1;self.pick=self.near()
-                    self.restore_focus=False;self.story_visited=True
-                    self.dial=0;self.code=self.dial_notice=''
-                    self.notice='CAMPAIGN SAVE LOADED';self.page='map'
+                    if not self.resume_campaign_story():self.focus_campaign_map()
                 else:self.notice='BLOCKED • No readable campaign save.'
             elif choose==1:
                 self.story.reload()
                 if self.story.status=='missing':self.start_story()
                 else:self.page='confirm';self.notice=''
-            elif choose==2:self.start_testing()
-            elif choose==3:
-                self.i=3
-                self.notice='';self.open_gallery('title')
-            elif choose==4:return False
+            elif choose==2:return False
         elif page=='gallery':
-            if not self.gallery.key(self,k):self.page=self.gallery_return
+            if not self.gallery.key(self,k):return False
         elif page=='confirm':
             if k==ESC:self.page='title';self.notice='CURRENT SAVE KEPT'
             elif kl=='n':self.start_story()
+        elif page=='campaign-complete':
+            self.i=self.nav(k,self.i,2)
+            choose=self.commit(k,self.i,2)
+            if k==ESC or choose==0:self.leave_map()
+            elif choose==1:self.focus_campaign_map()
+        elif page=='story-scene':self.key_story_scene(k)
+        elif page=='escape-fight':self.key_escape_fight(k)
+        elif page=='spaceport-press':
+            press=self.press_console.key(self,k)
+            if press=='back':self.press_console=None;self.page='brief'
+            elif press=='cross':self.press_console=None;self.stage()
+        elif page=='lab-route':
+            route=self.lab_route.key(self,k)
+            if route=='back':self.lab_route=None;self.page='brief'
+            elif route=='deploy':self.stage()
         elif page=='prologue':
-            if k==ESC:self.start_drill()
-            elif k==C.KEY_LEFT:self.prologue=max(0,self.prologue-1)
+            if k==C.KEY_MOUSE and campaign_story.button_clicked(self.prologue_button()):k='\n'
+            if k==ESC:self.leave_map()
             elif k in (*ENTER,' ',C.KEY_RIGHT):
-                if self.prologue==len(STORY)-1:self.start_drill()
-                else:self.prologue+=1
+                if self.save_opening('infiltration:start'):
+                    self.open_story_scene(self.story_offer('before',first_escape.SCENE_KEY),'map',checkpoint='opening')
         elif page=='drill':self.drill_key(k)
         elif page=='transition':
             if k in (*ENTER,ESC,' ',C.KEY_RIGHT):
@@ -588,16 +871,14 @@ class CampaignApp(TerminalSurface):
         elif page=='map':
             old=self.pick
             self.pick=self.nav(k,self.pick,len(self.nodes()))
-            if k==ESC:self.leave_map()
+            if k==ESC:
+                if self.testing:return False
+                self.leave_map()
             elif k in (C.KEY_LEFT,C.KEY_RIGHT) and self.opened()>1:self.switch(1 if k==C.KEY_RIGHT else -1)
             elif kl in ('h','?') and not self.testing:self.start_drill()
-            elif kl=='g' and self.testing:self.open_gallery('map')
             elif kl=='s':self.open_squad('map')
             elif kl=='v':self.open_velvet('map')
-            elif kl=='t':
-                if self.cached_trials is None:self.battle_init()
-                else:self.__dict__.update(self.cached_trials)
-                self.page='trials'
+            elif kl=='t' and self.testing:self.open_trials()
             else:
                 choose=self.commit(k,self.pick,len(self.nodes()))
                 if choose is not None:
@@ -605,19 +886,21 @@ class CampaignApp(TerminalSurface):
                     if self.store.can_play(n['id']):
                         self.palace_timeline.cue(self.chapters[self.ch]['id'],choose,time.monotonic())
                         self.node=n;self.page='brief';self.notice=''
-                    else:self.notice='LOCKED • Finish the previous operation.'
+                    else:self.notice=''  # The selected map row already explains the lock.
                 elif old!=self.pick:self.notice=''
         elif page=='brief':
             if k==ESC:self.page='map';self.notice=''
             elif kl=='s':self.open_squad('brief')
             elif kl=='v':self.open_velvet('brief')
+            elif kl=='h' and self.pass_practice():self.start_drill('brief')
+            elif kl=='c' and (offer:=self.briefing_story()[0]):self.open_story_scene(offer,'brief')
             elif k in ENTER:
                 if self.dials_required():self.page='dials';self.notice=''
-                else:self.stage()
+                else:self.deploy()
         elif page=='dials':self.key_dials(k)
         elif page=='casino-route':self.key_casino_route(k)
         elif page=='squad':
-            names=['Joker',*TEAM];d=self.store.data
+            names=self.squad_names();d=self.store.data
             if k==ESC:self.page=self.back;self.notice=''
             elif kl=='s':
                 if self.transact(lambda:self.store.equip_squad(self.edit),'SQUAD EQUIPPED')[0]:self.page=self.back
@@ -627,8 +910,12 @@ class CampaignApp(TerminalSurface):
                     self.i=choose;n=names[choose]
                     if n=='Joker':self.notice='Joker is always active.'
                     elif n not in d['teammates']:self.notice='LOCKED • This Thief has not joined.'
+                    elif operation_unavailable(self.squad_operation(),n):self.notice=n+' is not on this operation.'
                     elif n in self.edit:self.edit.remove(n);self.notice=n+' moved to standby.'
-                    elif len(self.edit)>=d['squad_slots']:self.notice='BLOCKED • Remove an active ally first.'
+                    elif len(self.edit)>=d['squad_slots']:
+                        locked=[name for name in self.edit if operation_unavailable(self.squad_operation(),name)]
+                        self.notice=(f'{locked[0]} holds a saved slot. Edit from the map.' if locked
+                                     else 'BLOCKED • Remove an active ally first.')
                     else:self.edit.append(n);self.notice=n+' selected. Press S to apply.'
         elif page=='velvet-entrance':
             if k in (*ENTER,ESC,' '):
@@ -653,7 +940,12 @@ class CampaignApp(TerminalSurface):
                 if not self.tab and choose is not None:
                     self.i=choose;self.fusion=self.store.fusion_options(names[choose]);self.sub=0;self.page='fusion';self.notice=''
                 elif self.tab:
-                    if choose is not None:self.i=choose
+                    if choose is not None:
+                        self.i=choose
+                        if k in ENTER and names[choose] not in self.store.data['stock']:
+                            self.page='summon';self.notice=''
+                    elif kl in ('e','p','a') and name not in self.store.data['stock']:
+                        self.notice='Resummon this Persona first.'
                     elif kl in ('e','p'):
                         if name in self.mask_edit:
                             if kl=='p':self.primary=name
@@ -671,67 +963,65 @@ class CampaignApp(TerminalSurface):
         elif page=='fusion':
             opts=self.donor_options()
             if k==ESC:self.page='velvet';self.notice=''
-            elif kl=='f':
+            elif k in ENTER or kl=='f':
                 name,skill,donor=self._fusion_selection()
                 preview=self.store.fusion_preview(name,skill,donor)
                 if not preview['available']:self.notice='BLOCKED • '+preview['reason']
-                elif preview['registered']:self.page='refuse';self.notice=''
-                elif self.transact(lambda:self.store.fuse(name,skill,donor),
-                                   'REGISTERED '+name+(f' WITH {skill}' if skill else ''))[0]:
-                    self.fused=name;self.page='registered'
+                else:self.page='fusion-confirm';self.notice=''
             else:
                 old=self.sub
                 self.sub=self.nav(k,self.sub,len(opts));choose=self.commit(k,self.sub,len(opts))
                 if choose is not None:self.sub=choose
                 if old!=self.sub:self.notice=''
-        elif page=='refuse':
+        elif page=='fusion-confirm':
             if k==ESC:self.page='fusion';self.notice=''
             elif k in ENTER:
                 name,skill,donor=self._fusion_selection()
-                ok,_=self.transact(lambda:self.store.fuse(name,skill,donor,revise=True),'REVISED '+name)
+                ok,_=self.transact(lambda:self.store.fuse(name,skill,donor,revise=self.fusion['registered']),
+                                   'FUSED '+name)
                 if ok:
                     done=self.notice;self._velvet_panel(True)
                     self.i=self.velvet_names().index(name);self.notice=done
-        elif page=='registered':
+        elif page=='summon':
             if k==ESC:self.page='velvet';self.notice=''
-            elif kl=='e':
-                d=self.store.data
-                if len(d['loadout'])>=d['slots']:self.sub=0;self.page='replace'
-                else:self.equip_fusion()
-        elif page=='replace':
-            ns=self.store.data['loadout']
-            if k==ESC:self.page='registered';self.notice=''
-            elif k in ENTER:self.equip_fusion(ns[self.sub])
-            else:
-                self.sub=self.nav(k,self.sub,len(ns));choose=self.commit(k,self.sub,len(ns))
-                if choose is not None:self.sub=choose
+            elif k in ENTER:
+                name=self.velvet_names()[self.i]
+                if self.transact(lambda:self.store.summon(name),'RESUMMONED '+name)[0]:
+                    self.page='velvet'
         elif page=='cards':
             cards=list(self.store.data['skill_cards'])
             if k==ESC:self.page='velvet';self.notice=''
             elif cards:
                 self.sub=self.nav(k,self.sub,len(cards));choose=self.commit(k,self.sub,len(cards))
                 if choose is not None:
+                    self.sub=choose
                     name=self.velvet_names()[self.i];skill=cards[choose]
-                    if self.transact(lambda:self.store.apply_skill_card(name,skill),name+' LEARNED '+skill)[0]:self.page='velvet'
+                    if not self.store.skill_card_block(name,skill):
+                        if self.transact(lambda:self.store.apply_skill_card(name,skill),name+' LEARNED '+skill)[0]:self.page='velvet'
         elif page=='battle':
             if self._b_overlay in ('resume','abandon') and k in ENTER:
                 if self._b_overlay=='abandon':self.stage()
                 else:self.page='map';self.notice='ATTEMPT ENDED  /  Campaign save unchanged'
-            elif self._b_battle.phase=='turn' or self._b_overlay is not None or self._b_cut_in:
-                self.battle_key(k);self.record()
+            elif (self._b_battle.phase=='turn'
+                  or self._b_overlay is not None or self._b_cut_in):
+                self.battle_key(k);self.field_lesson();self.record()
         elif page=='result':
             win=self._b_battle.phase=='win'
             if k==ESC:
                 if self.error:self.departure=('map',True)
+                elif win and self.pending_after():self.leave_map()
                 else:self.leave_result()
             elif k in ENTER and self.error:self.record(retry=True)
             elif k in ENTER and win:
-                if self.new_chapter():self.page='transition'
+                if offer:=self.after_scene():self.open_after(offer)
+                elif self.new_chapter():self.page='transition'
                 else:self.leave_result()
-            elif k in ENTER or (kl=='r' and not self.error):self.stage()
+            elif k in ENTER or (kl=='r' and not self.error and not self.pending_after()):self.stage()
             elif kl=='l' and not self.error:self._b_overlay='log';self._b_log_scroll=0;self.page='result-log'
+            elif not win and kl=='a':self.lead_pick=0;self.page='adjust-lead';self.notice=''
             elif win and not self.error and kl=='s':self.open_squad('result')
             elif win and not self.error and kl=='v':self.open_velvet('result',True)
+        elif page=='adjust-lead':self.key_adjust_lead(k)
         elif page=='result-log':
             self.battle_key(k)
             if self._b_overlay is None:self.page='result'
@@ -742,19 +1032,22 @@ class CampaignApp(TerminalSurface):
                 self.page='map';self.notice=''
         return True
 
-    def run(self,*,back_to_suite=False):
+    def run(self,*,back_to_suite=False,startup=True):
         self.back_to_suite=back_to_suite
         draw={'title':self.title,'confirm':self.confirm,'prologue':self.story_panel,'transition':self.transition,
-              'casino-route':self.draw_casino_route,
+              'campaign-complete':self.draw_campaign_complete,
+              'escape-fight':lambda:self.escape_fight.draw(self),'spaceport-press':lambda:self.press_console.draw(self),
+              'casino-route':self.draw_casino_route,'story-scene':lambda:self.story_scene.draw(self),
+              'lab-route':lambda:self.lab_route.draw(self),
               'map':self.draw_map,'drill':self.draw_drill,'brief':self.brief,'dials':self.draw_dials,'squad':self.draw_squad,
               'velvet-entrance':self.draw_velvet_entrance,
-              'velvet':self.draw_velvet,'fusion':self.draw_fusion,'refuse':self.draw_refuse,'registered':self.draw_registered,
-              'replace':self.draw_replace,'cards':self.draw_cards,'battle':self.draw_combat,'result':self.result,
-              'result-log':self.battle_page,'trials':self.battle_page,
+              'velvet':self.draw_velvet,'fusion':self.draw_fusion,'fusion-confirm':self.draw_fusion_confirm,
+              'summon':self.draw_summon,'cards':self.draw_cards,'battle':self.draw_combat,'result':self.result,
+              'result-log':self.battle_page,'adjust-lead':self.draw_adjust_lead,'trials':self.battle_page,
               'gallery':lambda:self.gallery.draw(self)}
-        startup=True
         started=None
         fast=False
+        opener_mouse=False
         while True:
             self.s.erase();self.h,self.w=self.s.getmaxyx()
             small=self.h<25 or self.w<65
@@ -772,8 +1065,15 @@ class CampaignApp(TerminalSurface):
                 if not startup:
                     if self.departure is not None:self.draw_departure()
                     else:draw[self.page]()
+            wants_mouse=(not startup and not small and (self.page in ('prologue','escape-fight') or
+                         (self.page=='story-scene' and self.story_scene.mouse_enabled())))
+            if wants_mouse!=opener_mouse:
+                SuiteMenu._mouse(C.BUTTON1_CLICKED if wants_mouse else 0)
+                opener_mouse=wants_mouse
             self.s.refresh()
-            animate=not small and self.page=='velvet-entrance'
+            animate=not small and (startup or self.page=='velvet-entrance'
+                or (self.page=='gallery' and self.gallery.started is not None)
+                or (self.page in ('battle','trials','result-log') and self._b_cut_in is not None))
             if animate!=fast:
                 self.s.timeout(32 if animate else 80)
                 fast=animate
@@ -784,7 +1084,9 @@ class CampaignApp(TerminalSurface):
                 if not small and k in (*ENTER,ESC,' '):startup=False
                 continue  # A skip is never sent to the live menu.
             if not small and back_to_suite and k==ESC and self.page=='title':return True
-            if (not small or self.departure is not None or k in ('q','Q')) and not self.key(k):return False
+            if (not small or self.departure is not None or k in ('q','Q')) and not self.key(k):
+                if opener_mouse:SuiteMenu._mouse(0)
+                return False
 
 def run_curses(s,save,seed,direct=False,p3_save=DEFAULT_P3_SAVE):
     try:C.curs_set(0)
@@ -801,8 +1103,13 @@ def run_curses(s,save,seed,direct=False,p3_save=DEFAULT_P3_SAVE):
     s.keypad(True);s.timeout(80)
     def open_persona5():
         return CampaignApp(s,Campaign(save),seed).run(back_to_suite=not direct)
+    extras_app=None
+    def open_persona5_extra(kind):
+        nonlocal extras_app
+        if extras_app is None:extras_app=CampaignApp(s,TestingCampaign(),seed)
+        extras_app.run_extra(kind)
     if direct:open_persona5()
-    else:SuiteMenu(s,p3_save,seed).run(open_persona5)
+    else:SuiteMenu(s,p3_save,seed).run(open_persona5,open_persona5_extra)
 
 if __name__=='__main__':
     p=argparse.ArgumentParser(description='Open the offline Persona terminal suite.')

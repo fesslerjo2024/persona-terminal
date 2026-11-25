@@ -23,33 +23,23 @@ def _merge(*sets):
 @cache
 def _native_catalog():
     # Every time comes from the same scene source used to draw the clip.
-    import native_diner
-    import native_finales
-    import native_openers
-    import native_stage
+    import native_showtime
+    import satanael_scene
     import wide_allout
     import wide_oracle
-    import wide_wrestling
-    from wrestling_scene import TITLE as WRESTLING
 
     def bind(draw, lengths):
         return {title: NativeClip(seconds, partial(draw, title))
                 for title, seconds in lengths.items()}
 
     return _merge(
-        {WRESTLING: NativeClip(wide_wrestling.SECONDS, wide_wrestling.render)},
         {title: NativeClip(seconds, partial(wide_oracle.render, title),
                           'Oracle' if title == wide_oracle.TITLE else None, True)
          for title, (seconds, _, _) in wide_oracle._SCENES.items()},
         {title: NativeClip(wide_allout.SECS[actor], partial(wide_allout.render, title), actor, True)
          for title, actor in wide_allout.BY_TITLE.items()},
-        bind(native_diner.render, {native_diner.TITLE: native_diner.SECONDS}),
-        bind(native_openers.render, {
-            'ROSE & REVOLVER': native_openers.ROSE[-1],
-            'HIGHWAY TO TROUBLE': native_openers.ROAD[-1],
-        }),
-        bind(native_stage.render, native_stage.DURATIONS),
-        bind(native_finales.render, native_finales.DURATIONS),
+        bind(native_showtime.render, native_showtime.DURATIONS),
+        bind(satanael_scene.render, {satanael_scene.TITLE: satanael_scene.SECONDS}),
     )
 
 

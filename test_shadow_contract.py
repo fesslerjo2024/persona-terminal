@@ -48,7 +48,7 @@ class ContractTests(unittest.TestCase):
         before=self.path.read_bytes()
         commands=self.app._b_action_menu()
         self.assertTrue(any(cat=='allout' and enabled for cat,_,_,enabled in commands))
-        self.assertTrue(any(cat=='contract' and 'first clear' in detail and enabled
+        self.assertTrue(any(cat=='contract' and 'on victory' in detail and enabled
                             for cat,_,detail,enabled in commands))
         self.app._b_index=next(i for i,row in enumerate(commands) if row[0]=='contract')
         self.app.key('\n')
@@ -67,7 +67,7 @@ class ContractTests(unittest.TestCase):
         self.assertFalse(self.b.hold_up or self.b.one_more)
         self.assertNotIn('Eligor',self.b.personas)
         self.assertEqual(self.path.read_bytes(),before)
-        self.assertTrue(any('Register Eligor on first clear' in msg for msg in self.b.log))
+        self.assertTrue(any('Register Eligor on victory' in msg for msg in self.b.log))
         self.assertFalse(any(unit is eligor for unit,*_ in self.b.damage_events))
         self.assertEqual(self.b.actor.name,'Skull')
         self.assertIsNone(self.b.act('skill:Zionga',silky))

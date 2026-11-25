@@ -11,6 +11,7 @@ from battle_data import persona, shadow
 from shuffle_data import SHUFFLE_ENEMIES
 
 
+
 PERSONA_ADDITIONS = {
     'Lilim': persona(['Eiga','Maeiga','Lullaby','Bufula'],
                      {'Ice':'resist','Wind':'weak','Bless':'weak','Curse':'null'},
@@ -68,8 +69,8 @@ NODES = (
     dict(id='spaceport-entry',region='Spaceport',title='The Biometric Gate',map_mark='GATE',
          tactic='Find Mona / Open the biometric gate',**_NAV,
          brief='Rejoin Mona and the Beauty Thief. Only someone with Haru’s family credentials can open the inner gate.',
-         story_before='Mona runs ahead after the argument with the team and meets Haru. The group reconciles. At the spaceport, Haru refuses to go back to the life her father chose for her, and Milady reveals her full strength.',
-         story_after='The counterfeit fiancé is defeated. Haru joins as Noir, determined to stop her father without letting him decide her future.',
+         story_before='Mona and a masked girl are already inside Okumura’s Palace. Catch up to them before trying the biometric gate.',
+         story_after='The counterfeit fiancé is defeated. Haru reaches for the gate key.',
          hint='Keep the support robots from shaping the whole fight. If a status lands, recover before the next hit can exploit it.',
          preview='Sugimura’s cognitive double and two worker robots.',
          waves=[['Cognitive Sugimura','Corporobo MDL-WKR','Corporobo MDL-WKR']],
@@ -86,9 +87,9 @@ NODES = (
                 ['Corporobo MDL-GM','Corporobo MDL-DM','Spaceport Kaiwan']],
          reward=dict(personas=['Mothman'],skill_cards=['Mapsio'],credits=280,joker_sp=5)),
     dict(id='spaceport-factory',region='Spaceport',title='Lunch Break',map_mark='PRESS',
-         tactic='Shift controls / Cross the stopped press',**_NAV,
-         brief='Use the shift console to stop the hydraulic press long enough to cross. An ordinary break is not enough for this route.',
-         story_before='The console treats a break as lost production. The press only stops long enough on its lunch setting. Beyond it, spent worker robots are fed into a furnace.',
+         tactic='Stop the press / Clear the patrol',press_console=True,**_NAV,
+         brief='Use the shift console to hold the press open. Fight past the patrol on the far side.',
+         story_before='Workers marked spent are fed into a furnace beyond the hydraulic press. Hold the press open long enough to cross, then clear the catwalk patrol.',
          story_after='The assembly line leads toward a vehicle large enough to take the ruler off the station. Futaba traces a path around the outer hull.',
          hint='Bring two forms of offense and a recovery option. Watch for reflected weapon attacks, and heal early if a group spell clips several allies.',
          preview='A press-side patrol and the guards above the incinerator.',
@@ -96,9 +97,9 @@ NODES = (
                 ['Spaceport Arahabaki','Plant Overseer']],
          reward=dict(personas=['Decarabia'],skill_cards=['Maeiga'],credits=295,joker_hp=8)),
     dict(id='spaceport-airlocks',region='Spaceport',title='Outside the Hull',map_mark='LOCK',
-         tactic='Match the airlocks / Reach the launch route',**_NAV,
-         brief='Match each door to its remote switch. Cross the linked airlocks to reach the launch chamber.',
-         story_before='The elevator will not take the team straight to the Treasure. The route instead leads through the vacuum, one controlled airlock at a time.',
+         tactic='Clear hull patrols / Reach the launch gantry',**_NAV,
+         brief='Fight past the two patrols guarding the outer hull and launch gantry.',
+         story_before='The elevator won’t take the crew to the Treasure. Oracle routes the team along the outer hull. Get past its patrols to reach the launch gantry.',
          story_after='The SS Utopia is Okumura’s escape craft. The Thieves can now reach it from the station and know where to return after the calling card.',
          hint='Read Analyze before committing to a repeated attack. Bring enough coverage to change plans if a rank takes little damage from your first choice.',
          preview='Two formations stationed along the outer hull and launch gantry.',
@@ -120,7 +121,7 @@ NODES = (
          tactic='Clear squads / Guard the big attacks',**_NAV,
          brief='Okumura protects himself with disposable units. Break their formation before he can call a new shift.',
          story_before='Mona turns down the offer. Okumura orders his workers to protect him, then shows Noir how readily he would discard even an image of his daughter.',
-         story_after='The crew takes the Treasure and escapes. A masked intruder strikes Shadow Okumura after they leave. Later, Okumura collapses during his televised confession and public suspicion turns on the Thieves.',
+         story_after='The last robot falls. Pick up the Treasure and clear the executive floor.',
          hint='Drop all three workers in a rank by the end of round 2 or they get one full reissue. Chain weakness hits and Baton Passes. Guard against the charges that follow.',
          preview='Five worker ranks, an executive unit, the cognitive copy, then the exposed ruler.',
          waves=[[name]*3 for name in _FLOOR_RANKS]+[
@@ -129,3 +130,7 @@ NODES = (
          items={'Soul Drop':3,'Snuff Soul':2},
          reward=dict(skill_cards=['Marakunda'],credits=475,joker_hp=9,joker_sp=7)),
 )
+
+CHAPTERS = (dict(id='spaceport', title='Okumura’s Spaceport', nodes=NODES,
+                 brief='The trail of breakdowns leads toward Okumura Foods. Mona wants to follow it before the rest of the team is ready.',
+                 completion='Okumura’s collapse puts the Thieves under suspicion.'),)

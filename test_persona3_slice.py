@@ -1,5 +1,7 @@
 """Campaign boundary checks for the independent Persona 3 field chapter."""
 from collections import deque
+from datetime import date
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
@@ -94,7 +96,14 @@ class FieldSliceTests(TestCase):
         self.store.commit(phase='monorail',day=MOON)
         app=P3App(None,self.store,seed=3)
         before=self.path.read_bytes()
-        app.key('\n')
+        from test_persona3_operation_route import OperationRouteTests
+        def board():
+            app.key('\n')
+            for _ in range(2):
+                OperationRouteTests.walk(self,app,(8,1));app.key('\n')
+            OperationRouteTests.walk(self,app,(2,1));app.key('\n')
+            OperationRouteTests.walk(self,app,(8,1));app.key('\n')
+        board()
         first=app.battle
         original_resources,bag=first.resources,dict(first.inventory)
         first.clock=1
@@ -107,17 +116,53 @@ class FieldSliceTests(TestCase):
         app.key('\n')
         self.assertEqual(app.page,'operation')
         self.assertEqual(before,self.path.read_bytes())
-        app.key('\n')
+        board()
         self.assertEqual(app.battle.resources,original_resources)
         self.assertEqual(app.battle.inventory,bag)
 
-    def test_fusion_keeps_parents_debits_once_and_survives_reload(self):
+    def test_fusion_consumes_stock_and_inheritance_survives_resummoning(self):
         self.store.new_game()
         self.store.commit(masks=('Orpheus','Pixie'),yen=130)
-        enriched=self.store.fuse('Nekomata')
-        self.assertEqual((enriched.masks,enriched.yen),(('Orpheus','Pixie','Nekomata'),20))
-        self.store.commit(equipped='Nekomata')
-        reloaded=P3Store(self.path)
-        self.assertEqual(reloaded.state.equipped,'Nekomata')
-        with self.assertRaises(P3SaveError):reloaded.fuse('Nekomata')
-        self.assertEqual(reloaded.state.yen,20)
+        self.assertIn(('Orpheus','Bash'),self.store.inheritance_options('Nekomata'))
+        enriched=self.store.fuse('Nekomata','Bash')
+        self.assertEqual((enriched.masks,enriched.yen),(('Nekomata',),130))
+        self.assertEqual(enriched.stock,{'Nekomata':('Bash',)})
+        self.assertEqual(enriched.equipped,'Nekomata')
+        reload=P3Store(self.path)
+        self.assertEqual(reload.state.stock,enriched.stock)
+        self.assertIn('Orpheus',reload.state.compendium)
+        with self.assertRaises(P3SaveError):reload.fuse('Nekomata')
+        reload.resummon('Orpheus')
+        self.assertEqual((reload.state.masks,reload.state.yen),(('Nekomata','Orpheus'),85))
+        self.assertEqual(reload.state.equipped,'Nekomata')
+
+    def test_v1_load_preserves_exact_bytes_and_progress_until_next_upgrade_write(self):
+        v1={'game':'persona-3-terminal','version':1,'state':{
+            'phase':'calendar','day':'2009-04-25','depth':3,'yen':340,'aid':1,
+            'academics':1,'courage':2,'charm':3,'activity':'library',
+            'masks':['Orpheus','Pixie','Angel'],'equipped':'Angel',
+        }}
+        raw=json.dumps(v1).encode()
+        self.path.write_bytes(raw)
+        self.store.reload()
+        s=self.store.state
+        self.assertEqual((s.day,s.depth,s.yen,s.equipped),(date(2009,4,25),3,340,'Angel'))
+        self.assertEqual(tuple(s.compendium),tuple(v1['state']['masks']))
+        self.assertEqual((s.xp,s.level),(280,3))
+        self.assertEqual(self.path.read_bytes(),raw)
+        self.store.grant_xp(25)
+        self.assertEqual(json.loads(self.path.read_bytes())['version'],11)
+        self.assertEqual(P3Store(self.path).state.depth,3)
+
+    def test_wait_for_moon_is_available_underleveled_and_keeps_partial_progress(self):
+        self.store.new_game();self.store.commit(phase='calendar',day=date(2009,4,21),depth=1,
+                                                   xp=100,masks=('Orpheus','Pixie'))
+        app=P3App(None,self.store);before=self.path.read_bytes()
+        app.key('4');app.key('4')
+        self.assertEqual(app.overlay,'wait')
+        app.key(ESC)
+        self.assertEqual(self.path.read_bytes(),before)
+        app.key('4');app.key('\n')
+        self.assertEqual((app.page,app.record.day,app.record.depth,app.record.xp),('operation',MOON,1,100))
+        self.assertEqual(app.record.masks,('Orpheus','Pixie'))
+        self.assertIsNone(app.battle)

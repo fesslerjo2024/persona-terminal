@@ -1,4 +1,4 @@
-"""Optional first-clear Hold Up recruitment; no save fields or RNG of its own."""
+"""Optional one-time Hold Up recruitment; no save fields or RNG of its own."""
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -68,7 +68,7 @@ def offers(node, registered):
 def merge_reward(node, registered, reward, result):
     """Validate the earned offer again at the atomic first-clear transaction."""
     if not isinstance(result,Offer) or offers(node,registered).get(result.shadow)!=result:
-        raise ValueError('That Shadow Contract is not available for this first clear.')
+        raise ValueError('That Shadow Contract is not available for this operation.')
     result_masks=_reward_personas(reward)
     result_masks[result.persona]=()
     return {**reward,'personas':result_masks}
@@ -95,7 +95,7 @@ def actions(b):
     if not candidates:
         return []
     masks=', '.join(dict.fromkeys(offer.persona for offer in candidates.values()))
-    return [('contract','Shadow Contract',f'{masks}: register on first clear. Ends Hold Up.')]
+    return [('contract','Shadow Contract',f'{masks}: register on victory. Ends Hold Up.')]
 
 
 def accept(b,target):
@@ -104,7 +104,7 @@ def accept(b,target):
     if offer is None:
         return 'No Shadow Contract for that target.'
     b.contract=offer
-    b._say(f'{target.name} withdraws. Register {offer.persona} on first clear.')
+    b._say(f'{target.name} withdraws. Register {offer.persona} on victory.')
     # Engine presence is HP-based. No damage/KO animation: the Shadow left.
     target.hp=0
     target.down=False

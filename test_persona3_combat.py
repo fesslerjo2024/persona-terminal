@@ -2,7 +2,7 @@
 import curses as C
 import unittest
 
-from persona3_combat import ESC, P3Battle, hp_meter
+from persona3_combat import ESC, P3Battle, hp_meter, party_caps, persona_skills
 
 
 class Surface:
@@ -10,10 +10,12 @@ class Surface:
 
     def __init__(self):
         self.drawn={}
+        self.painted=[]
 
     def put(self,y,x,text,*_):
         assert 0<=y<self.h and 0<=x<self.w and x+len(text)<self.w
         self.drawn.setdefault(y,[]).append(text)
+        self.painted.append((y,x,text))
 
     def __str__(self):
         return '\n'.join(''.join(self.drawn[y]) for y in sorted(self.drawn))
@@ -50,7 +52,8 @@ class Persona3CombatTests(unittest.TestCase):
         self.assertEqual(hp_meter(382,382,4),('████',''))
 
     def test_hp_sp_rows_show_every_unit_and_keep_long_names_and_ko(self):
-        for w,h,spacing,ally_width,enemy_width in ((65,25,2,6,17),(96,34,4,18,32)):
+        for w,h,first,left_step,right_step,ally_width,enemy_width in (
+                (65,25,7,2,3,6,17),(96,34,8,4,4,18,32)):
             with self.subTest(width=w):
                 b=P3Battle('dancing-hand',seed=6)
                 b.allies[0].hp=b.allies[0].max_hp//2
@@ -64,23 +67,31 @@ class Persona3CombatTests(unittest.TestCase):
                 before=b.resources
                 b.draw(frame)
                 self.assertEqual(b.resources,before)
-                team=[''.join(frame.drawn[8+i*spacing]) for i in range(3)]
-                meters=[''.join(frame.drawn[9+i*spacing]) for i in range(3)]
+
+                def half(y,enemy=False):
+                    return ''.join(t for row,x,t in frame.painted if row==y and (x>=w//2)==enemy)
+
+                team=[half(first+i*left_step) for i in range(3)]
+                team_sp=[half(first+1+i*left_step) for i in range(3)]
+                foes=[half(first+i*right_step,True) for i in range(3)]
+                foe_hp=[half(first+1+i*right_step,True) for i in range(3)]
                 self.assertIn('MakotoHP 65',team[0])
-                self.assertIn('Barbaric Beast Wheel ↓',team[0])
-                self.assertIn('SP 0',meters[0])
-                self.assertIn('▂'*ally_width,meters[0])
+                self.assertIn('SP 0',team_sp[0])
+                self.assertIn('▂'*ally_width,team_sp[0])
                 self.assertIn('YukariHP 0',team[1])
-                self.assertIn('KO',meters[1])
-                self.assertIn('Magic Hand A',team[1])
-                self.assertTrue(meters[1].endswith('▄'+'▂'*(enemy_width-1)))
-                self.assertIn('Magic Hand B KO',team[2])
-                self.assertIn('HP 0/49',meters[2])
-                self.assertTrue(meters[2].endswith('▂'*enemy_width))
-                self.assertTrue(all(row.count('▄')+row.count('▂')==ally_width for row in team))
-                self.assertTrue(all(row.count('▄')+row.count('▂')==ally_width+enemy_width for row in meters))
-                if spacing>2:
-                    self.assertFalse(any(y in frame.drawn for y in (10,11)))
+                self.assertIn('KO',team_sp[1])
+                self.assertIn('Barbaric Beast Wheel ↓',foes[0])
+                self.assertIn('Magic Hand A',foes[1])
+                self.assertTrue(foe_hp[1].endswith('▄'+'▂'*(enemy_width-1)))
+                self.assertIn('Magic Hand B KO',foes[2])
+                self.assertIn('HP 0/49',foe_hp[2])
+                self.assertTrue(foe_hp[2].endswith('▂'*enemy_width))
+                for row in team+team_sp:
+                    self.assertEqual(row.count('▄')+row.count('▂'),ally_width)
+                if left_step>2:
+                    self.assertEqual(half(first+2),'')
+                    self.assertEqual(half(first+3),'')
+                    self.assertEqual(half(first+3,True),'')
                 for name in b.COMMANDS:self.assertIn(name,str(frame))
 
     def test_early_roster_and_carry(self):
@@ -98,6 +109,7 @@ class Persona3CombatTests(unittest.TestCase):
         b=P3Battle('venus-eagles',seed=4)
         first,second=b.enemies
         self.assertEqual(len(b.enemies),2)
+        second.guard=False  # Isolate Shift and All-Out; the guard is tested separately.
         self.assertIsNone(b.act('skill:Agi',first))
         self.assertTrue(first.down and b.one_more and not b.all_out)
         junpei=b.allies[2]
@@ -186,7 +198,6 @@ class Persona3CombatTests(unittest.TestCase):
 
     def test_swift_axle_charge_warning_is_actionable(self):
         b=P3Battle('rampage-drive',persona='Pixie',seed=6)
-        for _ in b.allies: self.assertIsNone(b.act('guard'))
         self.assertIn('is charging',b.threat)
         self.assertIsNone(b.act('skill:Zio',b.enemies[0]))
         self.assertTrue(b.enemies[0].down)
@@ -196,3 +207,150 @@ class Persona3CombatTests(unittest.TestCase):
         self.assertIsNone(b.act('guard'))
         self.assertFalse(b.threat)
         self.assertIn('The knockdown interrupts Swift Axle’s charge.',b.log)
+
+    def test_persona_preview_target_cancel_and_explicit_free_equip(self):
+        for width,height in ((65,25),(100,40)):
+            with self.subTest(width=width):
+                b=P3Battle('priestess',stock={'Orpheus':(), 'Apsaras':('Agi',)},seed=2)
+                resources=b.resources
+                b.key('1')
+                b.key(C.KEY_RIGHT)
+                view=Surface();view.w,view.h=width,height
+                b.draw(view)
+                self.assertIn('Apsaras / PREVIEW',str(view))
+                self.assertIn('Ice resist',str(view))
+                self.assertIn('P EQUIP',str(view))
+                self.assertIn('Agi',str(view))
+                b.key('1');self.assertEqual(b.screen,'target')
+                b.key(ESC)
+                self.assertEqual((b.persona,b.screen,b.clock),('Orpheus','skills',30))
+                b.key('p')
+                self.assertEqual((b.persona,b.screen,b.clock),('Apsaras','skills',30))
+                self.assertEqual(b.allies[0].affinity['Ice'],'resist')
+                self.assertEqual(b.resources,resources)
+                b.key(C.KEY_RIGHT)
+                self.assertIsNone(b.mask_preview)
+                self.assertTrue(b.act('persona:Orpheus'))
+
+    def test_cast_validation_precedes_equip_and_normal_turn_resets_lock(self):
+        b=P3Battle('venus-eagles',stock={'Orpheus':(), 'Apsaras':('Agi',)},seed=3)
+        lead=b.actor
+        first,second=b.enemies
+        lead.sp=2
+        problem=b.act('skill:Agi',first,persona='Apsaras')
+        self.assertIn('needs 4 SP',problem)
+        self.assertEqual((b.persona,lead.sp,b.persona_used),('Orpheus',2,False))
+        lead.sp=20
+        self.assertTrue(b.act('skill:Agi',lead,persona='Apsaras'))
+        self.assertEqual((b.persona,lead.sp),('Orpheus',20))
+        self.assertIsNone(b.act('skill:Agi',first,persona='Apsaras'))
+        self.assertTrue(b.one_more and b.persona_used)
+        self.assertEqual((b.persona,lead.sp),('Apsaras',16))
+        self.assertIn('next normal turn',b.act('persona:Orpheus'))
+        self.assertTrue(b.one_more)
+        self.assertIsNone(b.act('shift',b.allies[2]))
+        self.assertIn('Only Makoto',b.act('persona:Orpheus'))
+        for _ in range(3):
+            if b.actor is lead:break
+            self.assertIsNone(b.act('guard'))
+        self.assertIs(b.actor,lead)
+        self.assertFalse(b.persona_used)
+        self.assertIsNone(b.act('persona:Orpheus'))
+
+    def test_level_caps_and_shared_persona_skill_source(self):
+        self.assertEqual(party_caps(3)['Protagonist'],(138,58))
+        self.assertIn('Sukukaja',persona_skills('Pixie',3,('Zio','Agi')))
+        self.assertEqual(persona_skills('Pixie',3,('Zio','Agi')).count('Zio'),1)
+        b=P3Battle('thebel-patrol',level=3,persona='Pixie',stock={'Pixie':('Agi',)},resources={'Yukari':(30,20)})
+        self.assertEqual(b.resources['Yukari'],(30,20))
+        self.assertEqual((b.actor.max_hp,b.actor.max_sp),(138,58))
+        self.assertEqual(b.actor.skills,persona_skills('Pixie',3,('Agi',)))
+        self.assertTrue(b.act('persona:Orpheus'))
+
+    def test_gatekeeper_guards_and_braces_prevent_instant_sweeps(self):
+        ravens=P3Battle('venus-eagles',seed=5)
+        target=ravens.enemies[-1]
+        self.assertIn('guarding',ravens.threat)
+        self.assertIsNone(ravens.act('skill:Agi',target))
+        self.assertFalse(target.down)
+        self.assertIs(ravens.actor,ravens.allies[1])
+        wheel=P3Battle('dancing-hand',seed=5)
+        wheel.actor=wheel.allies[1]
+        boss,*hands=wheel.enemies
+        self.assertIn('Magic Hands brace',wheel.threat)
+        self.assertIsNone(wheel.act('skill:Garu',boss))
+        self.assertFalse(boss.down)
+        self.assertLess(boss.hp,boss.max_hp)
+        for hand in hands:hand.hp=0
+        wheel.actor=wheel.allies[1]
+        self.assertIsNone(wheel.act('skill:Garu',boss))
+        self.assertTrue(boss.down)
+        self.assertNotIn('Magic Hands brace',wheel.threat)
+
+    def test_affinity_learning_only_from_hits_and_correct_each_target(self):
+        for w,h in ((65,25),(100,40)):
+            with self.subTest(width=w):
+                b=P3Battle('venus-eagles',seed=3)
+                one,two=b.enemies
+                b.key('1')
+                self.assertEqual(b._menu()[0][0],'Agi')
+                initial=Surface();initial.w,initial.h=w,h;b.draw(initial)
+                affinity_width=3 if w==65 else 5
+                fire_x=w//2+2+3*affinity_width
+                self.assertIn((10,fire_x,'?'),initial.painted)
+                b.key('1')
+                self.assertEqual([r[0] for r in b._menu()],[one.name,two.name])
+                self.assertTrue(not b.seen)
+                b.key(ESC);b.key(ESC)
+                b.key('7');b.key('1')
+                scan=Surface();scan.w,scan.h=w,h;b.draw(scan)
+                self.assertIn('Fire  UNKNOWN',str(scan))
+                self.assertEqual(b.seen,{})
+                b.key(ESC)
+                b.key('1');b.key('1');b.key('1')
+                self.assertEqual(b.seen,{one.name:{'Fire':'weak'}})
+                learned=Surface();learned.w,learned.h=w,h;b.draw(learned)
+                self.assertIn((10,fire_x,'W' if w==65 else 'WEAK'),learned.painted)
+                self.assertIn((13 if w==65 else 14,fire_x,'?'),learned.painted)
+                b.key('1')
+                self.assertIn('[WEAK]',b._menu()[0][0])
+                b.key('1')
+                self.assertEqual([r[0] for r in b._menu()],[one.name+' [WEAK]',two.name])
+                one.hp=0;one.down=False
+                b.key(ESC)
+                self.assertNotIn('[WEAK]',b._menu()[0][0])
+
+    def test_vulnerability_is_not_weakness_and_scan_stays_read_only(self):
+        b=P3Battle('priestess',seed=2)
+        foe=b.enemies[0]
+        self.assertIsNone(b.act('skill:Agi',foe))
+        self.assertFalse(b.one_more or foe.down)
+        self.assertEqual(b.seen[foe.name]['Fire'],'vulnerable')
+        self.assertEqual(b.clock,29)
+        self.assertIsNone(b.act('analyze',foe))
+        self.assertEqual(b.clock,29)
+        self.assertEqual(b.seen[foe.name],{'Fire':'vulnerable'})
+        b.overlay='intel'
+        scan=Surface();b.draw(scan)
+        self.assertIn('Fire  VULNERABLE',str(scan))
+        self.assertIn('does not knock down',str(scan))
+        b.overlay=None;b.actor=b.allies[-1]
+        b.screen='skills'
+        self.assertEqual(b._menu()[0][0],'Agi [VULN]')
+
+    def test_all_affinity_symbols_and_short_names_have_unique_colors_and_cells(self):
+        b=P3Battle('priestess')
+        e=b.enemies[0]
+        b.seen[e.name]={'Slash':'normal','Strike':'weak','Pierce':'resist','Fire':'vulnerable',
+                        'Ice':'null','Electric':'repel','Wind':'drain'}
+        for w,h,stride,marks in (
+                (65,25,3,('·','W','R','V','N','P','D','?','?')),
+                (100,40,5,('NORM','WEAK','RES','VULN','NULL','RPL','DRN','?','?'))):
+            frame=Surface();frame.w,frame.h=w,h;b.draw(frame)
+            x=w//2+2
+            self.assertEqual(tuple(t for y,col,t in frame.painted if y==10 and col>=x),marks)
+            self.assertTrue(all((10,x+i*stride,t) in frame.painted for i,t in enumerate(marks)))
+            b.overlay='help'
+            help_frame=Surface();help_frame.w,help_frame.h=w,h;b.draw(help_frame)
+            self.assertIn('V Vulnerable (extra damage, no down)',str(help_frame))
+            b.overlay=None

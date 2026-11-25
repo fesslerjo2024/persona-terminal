@@ -89,6 +89,8 @@ class ScriptedPalaceBossTests(unittest.TestCase):
                 self.until(b, lambda: b._boss_state.get('finisher_ready'),
                            action=lambda: b.act('attack', body))
                 self.assertEqual(b.phase, 'turn')
+                self.assertIn('THE CITY CHEERS', b.story_intent)
+                self.assertTrue(any('Over the radio' in line for line in b.log))
                 if b.actor is not b.allies[0]:
                     self.assertFalse(b.actions('story-special'))
                 self.until(b, lambda: b.actions('story-special'))
@@ -97,6 +99,8 @@ class ScriptedPalaceBossTests(unittest.TestCase):
                 self.assertTrue(all(not a.alive for a in arms))
                 self.assertIsNone(b.act('story-special'))
                 self.assertEqual(b.phase, 'win')
+                self.assertEqual(b.cut_in.title, 'SINFUL SHELL')
+                self.assertTrue(b.cut_in.finishing)
 
     def test_laboratory_protection_affinity_rotation_and_rule(self):
         b = self.battle('laboratory-choice', seed=8)

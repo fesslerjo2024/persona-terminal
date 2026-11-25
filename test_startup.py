@@ -14,6 +14,8 @@ from title_scene import PRODUCT_TITLE, STARTUP_SECONDS
 
 
 class ScriptedScreen:
+    def timeout(self,ms):
+        pass
     def __init__(self, app, inputs):
         self.app = app
         self.inputs = iter(inputs)
@@ -61,12 +63,14 @@ class StartupTests(unittest.TestCase):
 
     def test_playing_startup_lands_once_on_working_title(self):
         frames = self.run_app((2, None), (card.DURATION+.2, None),
-                              (STARTUP_SECONDS+.1, None), (7, '3'), (8, ESC), (9, 'q'),
-                              width=96, height=34)
+                              (STARTUP_SECONDS+.1, None), (7, '1'), (8, ESC), (9, 'q'),
+                              ready=True, width=96, height=34)
         self.assertTrue(all(PRODUCT_TITLE not in frame for _,_,frame in frames[:3]))
         self.assertIn(PRODUCT_TITLE, frames[3][2])
-        self.assertTrue(any(page == 'map' and 'G ANIMATION GALLERY' in frame
+        self.assertTrue(any(page == 'map' and 'CAMPAIGN SAVE LOADED' in frame
                             for page,_,frame in frames[4:]))
+        self.assertFalse(any('ANIMATION GALLERY' in frame or 'TESTING MODE' in frame
+                             or 'CLASSIC TRIALS' in frame for _,_,frame in frames))
         self.assertEqual(frames[-1][0],'title')
         self.assertIn(PRODUCT_TITLE, frames[-1][2])
 
@@ -100,7 +104,7 @@ class StartupTests(unittest.TestCase):
                 for row in art:
                     self.assertEqual(sum(len(run) for run,_ in row),w-1)
                 flat='\n'.join(''.join(run for run,_ in row) for row in art)
-                self.assertTrue(flat.isascii())
+                self.assertTrue(all(ch.isspace() or 0x2801<=ord(ch)<=0x28ff for ch in flat))
                 self.assertIsNone(re.search(r'[A-Z]{3,}',flat))
-                self.assertTrue(any(ink=='white' and '#' in run
+                self.assertTrue(any(ink=='white' and any(0x2801<=ord(ch)<=0x28ff for ch in run)
                                     for row in art for run,ink in row))

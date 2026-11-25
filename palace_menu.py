@@ -85,20 +85,18 @@ def map_view(app, now):
     nodes = app.nodes()
     cleared = app.store.data['cleared']
     active = app.pick
-    rows = tuple(Operation(n['id'],n['title'],n.get('map_mark',''),
-                 'clear' if not app.testing and n['id'] in cleared else
-                 'open' if app.store.can_play(n['id']) else 'locked',
-                 cleared.get(n['id'],'') if not app.testing else '',idx==active)
-                 for idx,n in enumerate(nodes))
-    row = rows[active]
-    if row.status=='locked':
-        if active:
-            required = nodes[active-1]['title']
-        elif app.ch:
-            required = app.nodes(app.ch-1)[-1]['title']
-        else:
-            required = 'the previous operation'
-        detail = f'Clear {required} first.'
+    rows = []
+    for idx, node in enumerate(nodes):
+        key = node['id']
+        can_play = app.store.can_play(key)
+        medal = '' if app.testing else cleared.get(key, '')
+        status = 'clear' if medal else 'open' if can_play else 'locked'
+        rows.append(Operation(key, node['title'] if can_play else '???',
+                              node.get('map_mark', '') if can_play else '',
+                              status, medal, idx == active))
+    rows = tuple(rows)
+    if rows[active].status == 'locked':
+        detail = 'Locked. Clear the previous operation to reveal it.'
     else:
         detail = nodes[active].get('brief','')
     elapsed, previous = app.palace_timeline.cue(chapter,active,now)
@@ -111,8 +109,7 @@ def map_screen(app, now):
     skin=SKINS[chapter['id']]
     view=map_view(app,now)
     footer=('←→ PALACE  ↑↓ PICK  ↵ BRIEF  S SQUAD  V VELVET',
-            ('G ANIMATION GALLERY  T CLASSIC TRIALS' if view.testing
-             else 'H HELP  T CLASSIC TRIALS')+'  ESC TITLE')
+            'T CLASSIC TRIALS  ESC EXTRAS' if view.testing else 'H FIELD DRILL  ESC TITLE')
     app.frame('PALACE MAP',footer,accent=skin.accent)
     progress='' if view.testing else f'  /  {view.cleared}/{len(view.rows)} CLEARED'
     app.put(4,3,(chapter['title'].upper()+progress)[:app.w-6],skin.accent,True)
@@ -161,13 +158,34 @@ def airlock(app, elapsed):
     """A brief sliding header hatch; battle controls remain live underneath."""
     if not 0<=elapsed<.74:
         return
-    width=app.w-4
-    half=width//2
-    gap=min(half-1,round(half*(elapsed/.74)**.7))
-    left=half-gap
-    right=width-half-gap
-    app.put(2,2,'╾'+'═'*(left-1),GREEN,True)
-    if right:
-        app.put(2,2+width-right,'═'*(right-1)+'╼',GREEN,True)
-    if gap:
-        app.put(2,2+left,'·'*(gap*2),DIM)
+    app.put(2,2,' '*(app.w-4),DIM)
+    for x, run, color in _airlock_strip(app.w-4, round(elapsed/.74*50)):
+        app.put(2,2+x,run,color,True)
+
+
+@lru_cache(maxsize=72)
+def _airlock_strip(width,frame):
+    """A four-dot-tall row of retracting pressure doors and an active seal."""
+    from detail_canvas import DotCanvas
+    canvas=DotCanvas(width,1)
+    span=canvas.w
+    half=span//2
+    gap=min(half,round(half*(frame/50)**.75))
+    for i in range(0,span-1,9):
+        canvas.put(i,2,'slate')
+    for side in (-1,1):
+        limit=half+side*gap
+        for j in range(3,width,3):
+            x=limit+side*j*2
+            canvas.line((x,1),(x+side*2,0),'forest')
+            canvas.line((x,2),(x+side*2,3),'forest')
+        canvas.line((limit+side*3,0),(limit+side*3,3),'green')
+        canvas.line((limit+side*2,1),(limit+side*6,1),'white' if frame<11 else 'teal')
+    inks={'white':WHITE,'green':GREEN,**IDS}
+    rows=canvas.finish()
+    x=0
+    ret=[]
+    for run,pigment in rows[0]:
+        if run.strip():ret.append((x,run,inks[pigment]))
+        x+=len(run)
+    return tuple(ret)

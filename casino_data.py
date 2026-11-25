@@ -55,7 +55,7 @@ def _n(id,title,mark,brief,after,waves,*,hint,recruits=(),**extra):
 NODES = (
     _n('casino-service','Behind the Tables','CARD',
        'Sae’s courthouse has turned into a casino. Cross the staff corridors for a security keycard, then ambush the guard holding the members card.',
-       'Oracle pulls the Casino map from the terminal. The members card starts the elevator, and Crow joins the active roster.',
+       'Oracle pulls the Casino map from the terminal. The members card starts the elevator.',
        [['Midnight Queen','Midnight Queen'],['Auspicious Pachyderm']],recruits=('Crow',),
        hint='Bring a few different elements. You need to get past two different security teams.'),
     _n('casino-rigging','Turn the House Against Itself','SLOTS',
@@ -64,7 +64,7 @@ NODES = (
        [['Wandering Reviver'],['Ose','Rangda']],wave_breaks={1:'dice',2:'slots'},
        hint='Clearing a guard opens the controls. The squad’s HP and SP carry over.'),
     _n('casino-darkness','House of Darkness','DARK',
-       'After the real court visit changes Sae’s cognition, the elevator admits the crew. The first high-limit attraction is a dark maze with a 1,000-coin entry fee.',
+       'Sae saw you in the real courtroom, so her Palace now recognizes you as guests. The High Limit elevator admits you to a dark maze with a 1,000-coin entry fee.',
        'The attendant pays the 10,000-coin prize. It covers the entry fee for Joker’s next challenge, the Battle Arena.',
        [['Rangda','Power'],['Snake King']],wave_breaks={1:'darkness'},
        hint='Bring healing. The exit attendant can charge a party-wide Electric attack.',
@@ -82,10 +82,11 @@ NODES = (
        hint='The bridge reads deposits from High Limit cards.'),
     _n('casino-heist','Leviathan and the Escape','HEIST',
        'Sae insists on one more game at her own wheel. Catch the rigging before she can turn it against the crew.',
-       'Sae is defeated. Joker draws the pursuit and is captured; the interrogation and the team\'s deception lead into the hunt for Shido. This is not a routine treasure theft ending.',
+       'Leviathan’s wheel stops. Security is already coming up the stairs.',
        [['Sae Leviathan']],story_gate=dict(requires='planned_calling_card_and_heist'),
        mechanic=dict(kind='roulette_boss'),
        hint='Guard through the first spin. When Oracle spots the glass, use the special action to break it.'),
 )
-CHAPTERS = (dict(id='casino',title="Sae's Casino",brief='Beat a house built on rigged justice.',
-                 completion='The arrest is part of a larger plan.',nodes=NODES),)
+CHAPTERS = (dict(id='casino',title="Sae's Casino",
+                 brief='After Okumura’s collapse, the prosecutor investigating the case turns her attention to the Thieves.',
+                 completion='The casino is behind you. Shido is next.',nodes=NODES),)
