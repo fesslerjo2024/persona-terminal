@@ -1,0 +1,1 @@
+"""Terminal suite regression tests."""

@@ -1,6 +1,6 @@
 # Persona 5 Terminal
 
-An offline Persona terminal suite with the Persona 3 base-game story and the Persona 5 campaign. See [Information Baseline](INFORMATION_BASELINE.md) for screen, data, and file naming rules.
+An offline Persona terminal suite with the Persona 3 base-game story and the Persona 5 campaign. See [Information Baseline](docs/INFORMATION_BASELINE.md) for screen, data, and file naming rules.
 
 [Windows setup](WINDOWS.md) · [Recovered project history](HISTORY.md)
 
@@ -274,8 +274,8 @@ All nine finishers and Squad Rush use an illustrated 2×4 dot grid inside
 each character cell for extra detail without resizing the terminal. The
 same technique is used for the opening, Tartarus elevator, Velvet Room,
 Theurgies and Oracle reels. The Dark Hour countdown retains the original
-layered-clock artwork and timing. See the [Persona 3 art references](persona3_allout_references.md)
-and [cinematic reference notes](persona3_animation_references.md).
+layered-clock artwork and timing. See the [Persona 3 art references](docs/persona3_allout_references.md)
+and [cinematic reference notes](docs/persona3_animation_references.md).
 
 ### Persona 5 Animation Gallery
 Use Left/Right for categories, Up/Down to select, and Enter to preview.
@@ -306,13 +306,25 @@ this session. Unseen clips and Gallery playback stay full length.
 
 ### Visual reference notes
 
-- [Live terminal artwork audit and references](terminal_art_inventory.md)
+- [Live terminal artwork audit and references](docs/terminal_art_inventory.md)
 
-- [Selector, Persona 3 opening, and smaller visual cues](suite_animation_references.md)
-- [Persona 5 Showtimes](persona5_showtime_references.md)
-- [Persona 5 All-Out Attacks and Oracle](persona5_finish_references.md)
-- [Persona 5 startup, Velvet Room, and Sinful Shell](persona5_story_references.md)
+- [Selector, Persona 3 opening, and smaller visual cues](docs/suite_animation_references.md)
+- [Persona 5 Showtimes](docs/persona5_showtime_references.md)
+- [Persona 5 All-Out Attacks and Oracle](docs/persona5_finish_references.md)
+- [Persona 5 startup, Velvet Room, and Sinful Shell](docs/persona5_story_references.md)
 
 These notes distinguish in-game references from original staging. All
 illustrations are drawn with terminal characters; no game images, video,
 or audio are bundled.
+
+## Repository layout
+
+- `campaign.py`: unchanged entry point for the suite, including `--persona5`.
+- `persona_terminal/persona3/` and `persona_terminal/persona5/`: each game's campaign, combat, and artwork.
+- `persona_terminal/shared/`: series selector, terminal drawing, input, and startup wiring.
+- `tests/`: regression tests. From the repository root, run `python3 -B -W error -m unittest discover -q`.
+- `docs/`: design and artwork notes.
+
+Default save slots still live beside `campaign.py`. The optional selector art
+preview is available to developers with
+`python3 -m persona_terminal.shared.selector_draft_gallery`.

@@ -1,0 +1,230 @@
+import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import unittest
+from unittest.mock import patch
+
+from persona_terminal.persona5.battle_ui import ENTER, ESC
+from persona_terminal.persona5.campaign import CampaignApp
+from persona_terminal.persona5.campaign_data import NODES
+from persona_terminal.persona5.campaign_state import Campaign, CampaignError, TestingCampaign
+
+
+class VelvetRevisionTests(unittest.TestCase):
+    def setUp(self):
+        tmp=TemporaryDirectory(prefix='persona-revision-')
+        self.addCleanup(tmp.cleanup)
+        self.path=Path(tmp.name)/'disposable-story.json'
+        self.story=Campaign(self.path)
+        self.story.new_game()
+
+    def prefix(self,through):
+        for node in NODES:
+            self.story.clear(node['id'],'B')
+            if node['id']==through:break
+
+    def reward_build(self):
+        self.prefix('museum-security')
+        self.story.apply_skill_card('High Pixie','Dia')
+        self.story.equip_personas(('High Pixie','Arsène','Pixie'),primary='High Pixie')
+
+    def app(self):
+        app=CampaignApp(None,self.story,seed=3)
+        app.w,app.h=65,25
+        rows=[]
+        app.put=lambda y,x,text,*args:rows.append((y,x,str(text)))
+        return app,rows
+
+    def choose_inheritance(self,app,skill):
+        app.sub=next(i for i,(_,x) in enumerate(app.donor_options()) if x==skill)
+
+    def test_reward_registered_lead_card_protected_cancel_then_confirm(self):
+        self.reward_build()
+        app,rows=self.app()
+        raw=self.path.read_bytes()
+        app.open_velvet('map')
+        app.key(ESC)  # Dismiss the entrance, not the room.
+        app.key('1')
+        self.choose_inheritance(app,'Cleave')
+        app.key('f')
+        self.assertEqual(app.page,'fusion-confirm')
+        app.draw_fusion_confirm()
+        body=' '.join(row for _,_,row in rows)
+        for text in ('CONFIRM FUSION','135','Consume: Arsène, Pixie','Cleave','Dia','Lead: High Pixie','Lead weaknesses: Nuclear, Gun'):
+            self.assertIn(text,body)
+        self.assertEqual(self.path.read_bytes(),raw)
+        before=self.story.data
+        app.key(ESC)
+        self.assertEqual(app.page,'fusion')
+        self.assertEqual(self.path.read_bytes(),raw)
+        app.key('f')
+        app.key(ENTER[0])
+        self.assertEqual(app.page,'velvet')
+        after=Campaign(self.path).data
+        self.assertEqual(after['credits'],before['credits']-135)
+        self.assertEqual(after['loadout'],['High Pixie'])
+        self.assertFalse(set(after['stock']) & {'Arsène','Pixie'})
+        self.assertTrue({'Arsène','Pixie'} <= set(after['personas']))
+        self.assertEqual(after['primary'],'High Pixie')
+        self.assertEqual(after['personas']['High Pixie'],['Dia','Cleave'])
+        self.assertEqual(after['fusion_skills'],{'High Pixie':'Cleave'})
+        self.assertEqual(after['skill_cards'],before['skill_cards'])
+
+    def test_revise_only_tracked_move_and_atomic_failure(self):
+        self.reward_build()
+        self.story.fuse('High Pixie','Cleave','Arsène',revise=True)
+        self.assertIn('Missing parents',self.story.fusion_options('High Pixie')['reason'])
+        self.story.summon('Arsène')
+        self.story.summon('Pixie')
+        preview=self.story.fusion_preview('High Pixie','Eiga','Arsène')
+        self.assertEqual((preview['preserved'],preview['gains'],preview['losses']),
+                         (['Dia'],['Eiga'],['Cleave']))
+        raw=self.path.read_bytes();before=self.story.data
+        with self.assertRaisesRegex(CampaignError,'Confirm re-fusion'):
+            self.story.fuse('High Pixie','Eiga','Arsène')
+        with patch('persona_terminal.persona5.campaign_state._write',side_effect=OSError('witness disk-write failure')):
+            with self.assertRaisesRegex(CampaignError,'witness disk-write failure'):
+                self.story.fuse('High Pixie','Eiga','Arsène',revise=True)
+        self.assertEqual(self.path.read_bytes(),raw)
+        self.assertEqual(self.story.data,before)
+        self.story.fuse('High Pixie','Eiga','Arsène',revise=True)
+        reloaded=Campaign(self.path)
+        self.assertEqual(reloaded.data['primary'],'High Pixie')
+        self.assertEqual(reloaded.data['personas']['High Pixie'],['Dia','Eiga'])
+        self.assertEqual(reloaded.data['fusion_skills'],{'High Pixie':'Eiga'})
+        reloaded.summon('Arsène')
+        reloaded.summon('Pixie')
+        raw=self.path.read_bytes()
+        with self.assertRaisesRegex(CampaignError,'No change'):
+            reloaded.fuse('High Pixie','Eiga','Arsène',revise=True)
+        self.assertEqual(self.path.read_bytes(),raw)
+
+    def test_legacy_unclassified_full_protected(self):
+        self.reward_build()
+        payload=json.loads(self.path.read_bytes())
+        self.assertNotIn('fusion_skills',payload)
+        # Five base + three unclassified moves already fill the legacy cap.
+        extras=['Dia','Cleave','Eiha']
+        payload['personas']['High Pixie']=extras
+        self.path.write_text(json.dumps(payload))
+        raw=self.path.read_bytes()
+        known=Campaign(self.path)
+        self.assertEqual(known.status,'ready')
+        self.assertEqual(known.fusion_preview('High Pixie','Eiga','Arsène')['preserved'],extras)
+        with self.assertRaisesRegex(CampaignError,'No free skill slot'):
+            known.fuse('High Pixie','Eiga','Arsène',revise=True)
+        self.assertEqual(self.path.read_bytes(),raw)
+
+    def test_new_fuse_and_testing_practice_keep_shared_state(self):
+        app,_=self.app();story_before=self.path.read_bytes()
+        app.start_testing()
+        full=app.store;old_data=full.data
+        self.assertIn('High Pixie',old_data['personas'])
+        app.open_velvet('map')
+        app.key(ESC)  # Dismiss the entrance, not the room.
+        app.key('x')
+        self.assertIsNot(app.store,full)
+        self.assertNotIn('High Pixie',app.store.data['personas'])
+        app.key('1');self.choose_inheritance(app,'Cleave');app.key('f')
+        self.assertEqual(app.page,'fusion-confirm')
+        self.assertNotIn('High Pixie',app.store.data['stock'])
+        app.key(ENTER[0])
+        self.assertEqual(app.page,'velvet')
+        self.assertEqual(app.store.data['personas']['High Pixie'],['Cleave'])
+        self.assertNotIn('Pixie',app.store.data['stock'])
+        app.key(ESC);app.key(ESC)
+        self.assertIs(app.store,full)
+        self.assertEqual(app.store.data,old_data)
+        self.assertEqual(self.path.read_bytes(),story_before)
+
+    def test_archive_is_read_only_until_confirm_and_restores_registered_skills(self):
+        self.prefix('museum-security')
+        # Give the parent a learned move so resummoning can prove it is not reset.
+        data=self.story.data
+        data['personas']['Arsène'].append('Dia')
+        self.story._commit(data)
+        self.story.fuse('High Pixie',revise=True,skill='Cleave',donor='Arsène')
+        app,rows=self.app()
+        self.assertNotIn('Arsène',app.lead_choices())
+        with self.assertRaisesRegex(CampaignError,'stock'):
+            self.story.equip_personas(['Arsène'])
+        with self.assertRaisesRegex(CampaignError,'Summon'):
+            self.story.apply_skill_card('Arsène','Eiha')
+        app.open_velvet('map',compendium=True);app.key(ESC)
+        app.i=app.velvet_names().index('Arsène')
+        before=self.story.data
+        raw=self.path.read_bytes()
+        app.draw_velvet()
+        self.assertIn('Archived',' '.join(row for _,_,row in rows))
+        app.key(ENTER[0]);self.assertEqual(app.page,'summon')
+        app.draw_summon()
+        self.assertIn('Dia',' '.join(row for _,_,row in rows))
+        app.key(ESC);self.assertEqual(app.page,'velvet')
+        self.assertEqual(self.path.read_bytes(),raw)
+        cost=self.story.summon_preview('Arsène')['cost']
+        app.key(ENTER[0]);app.key(ENTER[0])
+        self.assertEqual(app.page,'velvet')
+        after=Campaign(self.path)
+        self.assertIn('Arsène',after.data['stock'])
+        self.assertIn('Dia',after.persona_spec('Arsène')['skills'])
+        self.assertEqual(after.data['credits'],before['credits']-cost)
+        self.assertEqual(after.data['loadout'],before['loadout'])
+        with self.assertRaisesRegex(CampaignError,'Already in stock'):
+            after.summon('Arsène')
+
+    def test_card_preview_explains_effect_and_disables_duplicate_without_spending(self):
+        self.prefix('east-gallery')
+        self.story.fuse('High Pixie')
+        app,rows=self.app()
+        app.open_velvet('map',compendium=True);app.key(ESC)
+        app.i=app.velvet_names().index('High Pixie')
+        app.key('a')
+        app.draw_cards()
+        self.assertIn('Restore HP • one ally',' '.join(text for _,_,text in rows))
+        rows.clear();app.key('2');app.draw_cards()
+        displayed=' '.join(text for _,_,text in rows)
+        self.assertIn('Dormina ×1 [UNAVAILABLE]',displayed)
+        self.assertIn('already knows that skill',displayed)
+        before=self.path.read_bytes()
+        app.key(ENTER[0])
+        self.assertEqual(app.page,'cards')
+        self.assertEqual(self.path.read_bytes(),before)
+
+    def test_legacy_saves_infer_stock_without_writing(self):
+        self.prefix('museum-security')
+        payload=json.loads(self.path.read_bytes())
+        del payload['stock']
+        self.path.write_text(json.dumps(payload))
+        raw=self.path.read_bytes()
+        campaign=Campaign(self.path)
+        self.assertEqual(campaign.data['stock'],list(payload['personas']))
+        self.assertEqual(self.path.read_bytes(),raw)
+
+    def test_consumes_unequipped_parents_without_changing_battle_loadout(self):
+        self.prefix('castle-gate')
+        self.story.equip_personas(["Jack-o'-Lantern"])
+        preview=self.story.fusion_preview('High Pixie')
+        self.assertEqual(preview['loadout'],["Jack-o'-Lantern"])
+        self.story.fuse('High Pixie')
+        self.assertEqual(self.story.data['stock'],["Jack-o'-Lantern",'High Pixie'])
+        self.assertEqual(list(self.story.persona_loadout()),["Jack-o'-Lantern"])
+        self.assertFalse(self.story.fusion_options('Angel')['available'])
+
+    def test_invalid_stock_is_not_loaded(self):
+        data=self.story.data
+        data['stock'].remove(data['primary'])
+        self.path.write_text(json.dumps(data))
+        self.assertEqual(Campaign(self.path).status,'corrupt')
+
+    def test_escape_clears_failed_notice_and_view_does_not_write(self):
+        app,_=self.app();before=self.path.read_bytes()
+        app.open_velvet('map')
+        app.key(ESC)  # Dismiss the entrance, not the room.
+        app.key('1');app.key('f')
+        self.assertIn('Insufficient credits',app.notice)
+        app.key(ESC);app.key(ESC)
+        self.assertEqual(app.page,'map');self.assertEqual(app.notice,'')
+        self.assertEqual(self.path.read_bytes(),before)
+
+
+if __name__=='__main__':unittest.main()
