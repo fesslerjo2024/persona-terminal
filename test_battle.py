@@ -290,6 +290,29 @@ class StatInitiativeChecks(unittest.TestCase):
     self.assertGreaterEqual(sum(a.enemy!=z.enemy for a,z in zip(order,order[1:])),2)
    orders.add(tuple(u.name for u in b.order))
   self.assertGreater(len(orders),8)
+ def test_classic_shuffle_ally_opener_and_stable_rounds(self):
+  team=['Mona','Violet','Queen']
+  openers=set();examples=set()
+  for seed in range(64):
+   b=Battle(team,'Mementos Shuffle',seed=seed)
+   self.assertFalse(b.actor.enemy)
+   self.assertIs(b.actor,b.order[0])
+   openers.add(b.actor.name)
+   examples.add(tuple(u.name for u in b.order if not u.enemy))
+   self.assertEqual(len(b.order),len(set(b.order)))
+   self.assertEqual(b.order,b.next_order)
+  self.assertEqual(openers,{'Joker',*team})
+  self.assertGreater(len(examples),8)
+  b=Battle(team,'Mementos Shuffle',seed=0)
+  initial=b.order[:]
+  # Keep every participant available; only compare ordinary slots.
+  b._enemy_step=lambda _:False
+  for _ in range(8):
+   self.assertIsNone(b.act('guard'))
+  self.assertEqual(b.round,3)
+  self.assertEqual(b.order,initial)
+  self.assertEqual(b.next_order,initial)
+
  def test_next_round_uses_exact_forecast(self):
   b=self.battle(9,True);forecast=list(b.next_order)
   b._enemy_step=lambda _:False

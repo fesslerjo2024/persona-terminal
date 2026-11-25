@@ -23,7 +23,8 @@ Use a different save path from your original campaign or rollback.
 - **3 Testing Mode** opens all 53 operations without changing Story. It also
   lets you swap squad and Personas in that temporary session. Press **T**
   on either chapter map for Classic Trials, including Reaper Alert and
-  Mementos Shuffle; another **T** resumes a paused trial.
+  Mementos Shuffle; another **T** resumes a paused trial. Mementos Shuffle starts
+  with a randomly ordered ally, then keeps that ordinary turn cycle.
 - In battle, open **Persona** on Joker’s turn, then use **←/→** to browse.
   Selecting a skill and confirming its target commits the switch. Esc cancels
   a preview, with no SP cost.

@@ -210,7 +210,13 @@ class Battle:
      u.sp=max(u.sp,min(u.max_sp,intermission['sp_floor']))
    self._say('Maintenance break: standing Thieves recover to minimum HP and SP.')
   self.order=self._story_order() if self.story else self._roll_order()
-  self.next_order=self.order[:] if self.story else self._roll_order();self.cursor=-1
+  if not self.story and self.config.get('shuffle_count'):
+   # Give the player one opening action without adding an initiative slot.
+   # The first ready ally in the shuffled ring is not always Joker.
+   start=next((i for i,u in enumerate(self.order) if self._ready_for_opening(u)),0)
+   self.order=self.order[start:]+self.order[:start]
+  self.next_order=self.order[:] if self.story or self.config.get('shuffle_count') else self._roll_order()
+  self.cursor=-1
   self._boss_state={};self._story_intent='';self._showtime=None
   for u in self.allies:
    u.ammo=u.max_ammo;u.down=False;u.guard=False
@@ -247,7 +253,8 @@ class Battle:
    self._finish_slot()
    self.cursor+=1
    if self.cursor>=len(self.order):
-    self.order=self.next_order;self.next_order=self.order[:] if self.story else self._roll_order()
+    self.order=self.next_order
+    self.next_order=self.order[:] if self.story or self.config.get('shuffle_count') else self._roll_order()
     self.cursor=0;self.round+=1;self._say(f'Round {self.round}.')
     if self.story:
      from weekend_bosses import on_round
