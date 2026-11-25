@@ -4,7 +4,6 @@ import textwrap
 import time
 from cutins import duration as cutin_duration
 import cinema
-from wrestling_scene import HEIGHT as SCENE_ROWS, WIDTH as SCENE_COLUMNS
 
 RED,GOLD,CYAN,WHITE,DIM,GREEN=range(1,7)
 ENTER=(C.KEY_ENTER,'\r','\n')
@@ -549,14 +548,16 @@ class BattleUI:
                 self._b_put(self.h//2+dy,self.w//2-size-1,'*',GOLD)
                 self._b_put(self.h//2+dy,self.w//2+size+1,'*',GOLD)
             return
-        _,rows=scene[1](elapsed)
+        _,rows=cinema.paint(title,elapsed,self.w-1,self.h)
+        self.draw_scene_rows(rows)
+
+    def draw_scene_rows(self,rows):
+        """Paint to the current terminal bounds, not a fixed picture box."""
         inks={'queen':CYAN,'noir':GOLD,'foe':RED,'rope':DIM,
               'rail':RED,'face':WHITE,'dim':DIM,'flash':GOLD,
               'red':RED,'gold':GOLD,'cyan':CYAN,'green':GREEN,'white':WHITE}
-        left=(self.w-SCENE_COLUMNS)//2
-        top=(self.h-SCENE_ROWS)//2
-        for y,row in enumerate(rows,top):
-            x=left
+        for y,row in enumerate(rows):
+            x=0
             for run,ink in row:
                 if run.strip():self._b_put(y,x,run,inks[ink],ink not in ('dim','rope'))
                 x+=len(run)
