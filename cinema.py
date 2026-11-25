@@ -33,12 +33,10 @@ def get(title):
 
 
 def paint(title,t,width,height):
-    """Compose in real terminal cells on every frame, including after resize."""
+    """Draw directly in native cells. Legacy cels are never composited."""
     import wide_wrestling
     import wide_oracle
     import wide_allout
-    import wide_locations
-    from wide_canvas import Canvas
 
     if title == wrestling_scene.TITLE:
         return wide_wrestling.render(t,width,height)
@@ -47,12 +45,15 @@ def paint(title,t,width,height):
     from cutins import ALL_OUT
     if any(card[0]==title for card in ALL_OUT.values()):
         return wide_allout.render(title,t,width,height)
-    beat,action = get(title)[1](t)
-    left=(width-wrestling_scene.WIDTH)//2
-    # Raise the action slightly on extra-tall terminals. The new foreground
-    # has room below without introducing a letterboxed matte.
-    top=(height-wrestling_scene.HEIGHT)//2-(height>=32)
-    screen=Canvas(width,height)
-    wide_locations.paint(screen,title,t,left,top,width,height)
-    screen.overlay(action,left,top)
-    return beat,screen.finish()
+
+    if title == 'MIDNIGHT TAKEOUT':
+        from native_diner import render
+    elif title in ('ROSE & REVOLVER','HIGHWAY TO TROUBLE'):
+        from native_openers import render
+    elif title in ('THE DUEL AT DUSK','TEA IN THE CROSSHAIRS'):
+        from native_stage import render
+    elif title in ('TWO SIDES OF THE MASK','THE LAST WALTZ'):
+        from native_finales import render
+    else:
+        raise KeyError(title)
+    return render(title,t,width,height)

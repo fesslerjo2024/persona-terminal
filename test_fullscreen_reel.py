@@ -57,3 +57,15 @@ class FullScreenTests(unittest.TestCase):
             self.assertLessEqual(next(i for i,row in enumerate(a) if row.strip()),h//4)
             self.assertTrue(any(row[0]!=' ' for row in a))
             self.assertTrue(any(row[-1]!=' ' for row in a))
+
+    def test_showtime_paint_never_uses_the_old_cel_and_has_scene_color(self):
+        from unittest.mock import patch
+        for title,_ in cutins.SHOWTIMES.values():
+            with self.subTest(title=title), patch('cinema.get',side_effect=AssertionError('legacy cel call')):
+                used=set()
+                for t in (.42,2.18,4.33,6.56):
+                    _, rows=cinema.paint(title,t,95,34)
+                    self.assertTrue(any(len(run.strip())>0 for row in rows for run,_ in row))
+                    used.update(ink for row in rows for run,ink in row if run.strip())
+                from reel_palette import IDS
+                self.assertGreaterEqual(len(used & IDS.keys()),2,used)

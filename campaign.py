@@ -7,6 +7,7 @@ from pathlib import Path
 import textwrap
 import time
 from animation_gallery import AnimationGallery
+from reel_palette import install as install_scene_palette
 from battle_data import TEAM
 from battle_ui import BattleUI, RED, GOLD, CYAN, WHITE, DIM, GREEN, ENTER, ESC
 import campaign_data as content
@@ -610,6 +611,7 @@ def run_curses(s,store,seed):
     colors=[203,221,51,255,246,84] if C.COLORS>=256 else [
         C.COLOR_RED,C.COLOR_YELLOW,C.COLOR_CYAN,C.COLOR_WHITE,C.COLOR_WHITE,C.COLOR_GREEN]
     for i,color in enumerate(colors,1):C.init_pair(i,color,bg)
+    install_scene_palette(bg)
     s.keypad(True);s.timeout(80)
     CampaignApp(s,store,seed).run()
 

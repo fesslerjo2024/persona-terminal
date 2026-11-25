@@ -18,33 +18,44 @@ def _pos(w, h, x, y):
 
 
 def _starfield(c, w, h, t, palette):
-    """Independently moving deep stars, far ridges, and projected floor."""
-    horizon = round(h*.71)
-    for i in range(w*h//34):
-        z = i%3+1
-        x = (i*73 + 11*(i//7) - round(t*z*2)) % w
-        y = (i*47 + 13*(i//11)) % (horizon+3)
-        pulse = (i+round(t*9))%17
-        c.put(x, y, '+' if pulse in (0,1) else '*' if i%11==0 else '.', palette if pulse==0 else 'dim')
-    for x in range(0,w,2):
-        flow = x + t*8
-        y = horizon - round((sin(flow*.082) + .40*sin(flow*.207))*h*.043)
-        c.put(x,y,('^','_','~')[x%3],'dim')
-    vx = round(w*.51)
-    for x in range(-w//3, w+w//3, max(8,w//12)):
-        c.line(vx+(x-vx)//8, horizon+1, x, h-1, 'dim', '.' if x%3 else ':')
-    for j in range(1,7):
-        f = (j/6 + t*.35) % 1
-        y = horizon+1+round(f*f*(h-horizon-2))
-        step = max(4, int(2+f*9))
+    """Color-coded near and far belts; terrain projects to the live cell grid."""
+    horizon=round(h*.71)
+    dark,lit=('forest','teal') if palette=='green' else ('navy','violet')
+    cx=round(w*.51)
+    drift=int(t*12)
+    for x in range(w):
+        u=x/w
+        radius=(1-abs(x-cx)*2/w)
+        upper=round(h*(.27-.17*radius)+sin(u*14+t*.5)*h*.05)
+        lower=upper+max(2,h//7)
+        for y in range(max(0,upper),min(horizon,lower)):
+            if (x*17+y*11-drift)%16<4:
+                c.put(x,y,'.' if (x+y)%4 else '~',dark if y%3 else lit)
+        if x%2==0:
+            flow=x+t*8
+            y=horizon-round((sin(flow*.082)+.4*sin(flow*.207))*h*.043)
+            c.put(x,y,'^_~'[x%3],lit if x%6==0 else dark)
+    for i in range(w*h//36):
+        z=i%3+1
+        x=(i*73+11*(i//7)-round(t*z*2))%w
+        y=(i*47+13*(i//11))%(horizon+3)
+        pulse=(i+round(t*9))%17
+        c.put(x,y,'+' if pulse in (0,1) else '*' if i%11==0 else '.',
+              palette if pulse<=2 else lit if i%5==0 else dark)
+    for x in range(-w//3,w+w//3,max(8,w//12)):
+        c.line(cx+(x-cx)//8,horizon+1,x,h-1,dark,'.' if x%3 else ':')
+    for j in range(1,8):
+        phase=(j/7+t*.35)%1
+        y=horizon+1+round(phase**2*(h-horizon-2))
+        step=max(4,int(2+phase*9))
         for x in range((int(t*9)+j)%step,w,step):
-            c.put(x,y,'_' if j%2 else '-','dim')
-    for x,f in ((w//13,.12),(w//4,.07),(w*4//5,.10),(w*15//16,.14)):
-        size = max(2,round(h*f))
-        y = min(h-2,horizon+round((x%17)/17*(h-horizon)))
-        c.line(x-size,y+1,x,y-size,'dim','/')
-        c.line(x,y-size,x+size*2,y,'dim','\\')
-        c.line(x-size,y+1,x+size*2,y,'dim','_')
+            c.put(x,y,'_' if j%2 else '-',dark if j%3 else lit)
+    for x,q in ((w//13,.12),(w//4,.07),(w*4//5,.10),(w*15//16,.14)):
+        size=max(2,round(h*q))
+        y=min(h-2,horizon+round((x%17)/17*(h-horizon)))
+        c.line(x-size,y+1,x,y-size,dark,'/')
+        c.line(x,y-size,x+size*2,y,lit,'\\')
+        c.line(x-size,y+1,x+size*2,y,dark,'_')
     return horizon
 
 
@@ -78,7 +89,7 @@ def _ship(c, cx, y, width, h, tick):
     rim = [':' if i%4 else '_' for i in range(2*rad-3)]
     for i in range(2,len(rim)-1,p):
         rim[i] = ('o','*','O','*')[(tick//3+i//p)%4]
-    c.put(cx-rad+1,base+2,'\\'+''.join(rim)+'/','green',True)
+    c.put(cx-rad+1,base+2,'\\'+''.join(rim)+'/','teal',True)
     tail = max(3, rad//4)
     c.put(cx-rad+3,base+3, '\\'+'_'*(rad-tail-4)+'/'+'='*(2*tail-1)+'\\'+'_'*(rad-tail-4)+'/','cyan',True)
     c.put(cx-tail+1,base+4,'<'+':'*(2*tail-3)+'>','white',True)
@@ -189,7 +200,7 @@ def _payload(c,w,h,t,ground):
         for k in range(w//4):
             px = impact_x+(k*29%(w//2))-w//4+round(leave*11)
             py = impact_y-round((k%8)*leave*h/24)
-            c.put(px,py,'.' if k%3 else ',','dim')
+            c.put(px,py,'.' if k%3 else ',','forest')
     _ship(c,sx,sy,hull,h,tick)
     return 'flyover' if t<.88 else 'payload' if t<1.70 else 'blast' if t<2.69 else 'depart'
 
@@ -225,7 +236,7 @@ def _guard(c,w,h,t,ground):
     cx,base = _pos(w,h,.34,.87)
     sx,sy = _pos(w,h,.30+sin(t*3.5)*.055,-.22+.26*_p(t,0,.54)-.22*_p(t,2.16,2.88))
     tick = round(t*35)
-    radius = round(w*.30)
+    radius = round(w*.34)
     dome_h = max(6,round(h*.52))
     growth = _p(t,.38,.96)
     shield = growth*(1-_p(t,2.17,2.85))

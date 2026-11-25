@@ -4,6 +4,7 @@ import textwrap
 import time
 from cutins import duration as cutin_duration
 import cinema
+from reel_palette import IDS as SCENE_PIGMENTS
 
 RED,GOLD,CYAN,WHITE,DIM,GREEN=range(1,7)
 ENTER=(C.KEY_ENTER,'\r','\n')
@@ -555,11 +556,12 @@ class BattleUI:
         """Paint to the current terminal bounds, not a fixed picture box."""
         inks={'queen':CYAN,'noir':GOLD,'foe':RED,'rope':DIM,
               'rail':RED,'face':WHITE,'dim':DIM,'flash':GOLD,
-              'red':RED,'gold':GOLD,'cyan':CYAN,'green':GREEN,'white':WHITE}
+              'red':RED,'gold':GOLD,'cyan':CYAN,'green':GREEN,'white':WHITE,
+              **SCENE_PIGMENTS}
         for y,row in enumerate(rows):
             x=0
             for run,ink in row:
-                if run.strip():self._b_put(y,x,run,inks[ink],ink not in ('dim','rope'))
+                if run.strip():self._b_put(y,x,run,inks[ink],ink not in ('dim','rope','slate','navy','forest','ochre','wine'))
                 x+=len(run)
 
     def battle_page(self):

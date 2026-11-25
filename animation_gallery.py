@@ -155,21 +155,21 @@ def _effect_floor(w,h,t):
     c=Canvas(w,h)
     horizon=h//2-3
     for x in range(-w//3, 4*w//3, max(4,w//9)):
-        c.line(w//2+(x-w//2)//7,horizon,x,h-1,'dim','.')
+        c.line(w//2+(x-w//2)//7,horizon,x,h-1,'navy','.')
     for i in range(4):
         y=h-1-round(i*i*(h-horizon)/16)-int(t*4)%2
-        c.put(0,y,'- '*((w+1)//2),'dim')
+        c.put(0,y,'- '*((w+1)//2),'slate')
     for i in range(max(12,w//3)):
         x=(i*19+round(sin(t*2+i)*3))%w
         y=(i*7+int(t*4)*(1+i%2))%max(1,horizon-3)
-        c.put(x,y,'.' if i%4 else '+','dim')
+        c.put(x,y,'.' if i%4 else '+','slate')
     if .35<t<.82:
         f=(t-.35)/.47
         for side in (-1,1):
             reach=round(f*w*.48)
             for off in (0,3,7):
                 x=w//2+side*(reach+off)
-                c.put(x,h//2-3+off//3,'*' if off==0 else '.','gold' if f<.7 else 'dim')
+                c.put(x,h//2-3+off//3,'*' if off==0 else '.','gold' if f<.7 else 'slate')
     return c.finish()
 
 

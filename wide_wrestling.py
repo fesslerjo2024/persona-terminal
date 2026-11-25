@@ -80,12 +80,13 @@ def _arena(c,w,h,t,floor,back,far,near,impact):
     mid=w//2; last=w-1; tier=max(2,back-1)
     # Ceiling rig and angled spotlights; the square belongs to the *ring*,
     # not to the window. The hall runs continuously under it toward all edges.
-    c.put(0,0,('/=\\='*((w+3)//4))[:w],'rail')
-    c.put(0,1,('- -- '*((w+4)//5))[:w],'dim')
+    c.put(0,0,('/=\\='*((w+3)//4))[:w],'wine')
+    c.put(0,1,('- -- '*((w+4)//5))[:w],'violet')
     for x,aim in ((w//7,w//3),(w//3,w//5),(w*2//3,w*4//5),(w*6//7,w*2//3)):
-        c.put(x-2,2,'[=]','rail',True)
-        c.line(x,3,aim,tier-1,'dim')
-        c.line(x+2,3,min(last,aim+w//14),tier-1,'dim')
+        lamp='rose' if x<mid else 'teal'
+        c.put(x-2,2,'[=]',lamp,True)
+        c.line(x,3,aim,tier-1,lamp)
+        c.line(x+2,3,min(last,aim+w//14),tier-1,'slate')
         if (int(t*10)+x)%23<4:
             c.put(x-1,3,'+*','face')
     # Distinct tiers of heads, benches, raised arms and changing camera glints.
@@ -93,10 +94,10 @@ def _arena(c,w,h,t,floor,back,far,near,impact):
         row=''.join('o' if (x*11+y*19)%31 in (1,8,17)
                     else '.' if (x*7+y*13)%13<3
                     else '/' if (x*13+y*3)%49==5 else ' ' for x in range(w))
-        c.put(0,y,row,'dim')
+        c.put(0,y,row,('navy','violet','wine')[(y//2)%3])
         if y%3==0:
             for x in range((y*7)%13,w,18):
-                c.put(x,y,'[ ]','rail')
+                c.put(x,y,'[ ]','violet' if (x+y)%5 else 'amber')
     phase=int(t*8)
     for j in range(8):
         x=(j*31+17)%w; y=4+((j*11+phase//7)%max(1,tier-4))
@@ -108,14 +109,14 @@ def _arena(c,w,h,t,floor,back,far,near,impact):
         l=round(far+(near-far)*f)
         r=last-l
         c.put(l,y,' '*(r-l+1),'dim',True)
-        c.put(l,y,'/' + ('. ' * ((r-l)//2))[:max(0,r-l-1)] + '\\','dim')
+        c.put(l,y,'/' + ('. ' * ((r-l)//2))[:max(0,r-l-1)] + '\\','navy')
     for k in (1,3,5):
         y=back-k
-        c.line(far,y,last-far,y,'rope','=')
+        c.line(far,y,last-far,y,'teal' if k==3 else 'violet','=')
         c.put(far-2,y,'[O]','rail',True)
         c.put(last-far,y,'[O]','rail',True)
-        c.line(far,y,near, min(floor,y+(floor-back)),'rope')
-        c.line(last-far,y,last-near,min(floor,y+(floor-back)),'rope')
+        c.line(far,y,near, min(floor,y+(floor-back)),'slate')
+        c.line(last-far,y,last-near,min(floor,y+(floor-back)),'slate')
     for x in (far-1,last-far+1):
         c.line(x,back-6,x,back+1,'rail','|')
         for k in (1,3,5):
@@ -127,7 +128,7 @@ def _arena(c,w,h,t,floor,back,far,near,impact):
         r=last-l
         fabric=''.join('/' if (x+y*2)%7 in (0,1) else '.' if (x+2*y)%9==4
                        else '-' if y==h-1 else ' ' for x in range(r-l+1))
-        c.put(l,y,fabric,'rail',True)
+        c.put(l,y,fabric,'wine' if y%2 else 'rose',True)
         for x in (l,min(last,r)):
             c.put(x,y,'|' if y<h-1 else '+','face')
     for x in (near,last-near):
@@ -135,7 +136,7 @@ def _arena(c,w,h,t,floor,back,far,near,impact):
         c.put(x,floor,'O','face')
     if h-floor>5:
         for x in (w//4,mid,w*3//4):
-            c.put(x-3,floor+3,(r'  /^\  ',r' < + > ',r'  \/  '),'rope',True)
+            c.put(x-3,floor+3,(r'  /^\  ',r' < + > ',r'  \/  '),'violet',True)
 
 
 def _burst(c,x,y,f,reach):

@@ -50,9 +50,10 @@ nine animated character finishers. **Oracle Support** has three action-only
 scenes: the squad recovery relay, Final Guard's shield, and the UFO flyover.
 Final Guard is a preview only in this build. Playback is artwork only:
 no portrait cards, scene captions, or control overlays. Clips redraw against
-the current terminal dimensions. The wrestling arena, All-Out attacks and
-Oracle clips use responsive staging; the other Showtimes retain their action
-poses against expanded location scenery. No font scaling is applied.
+the current terminal dimensions. Each Showtime is blocked afresh using those
+dimensions: the actors, props, motion paths and colored scenery share one
+stage. The All-Out and Oracle clips also use native cells. No centered legacy
+frame, border, or font scaling is used during playback.
 
 The game uses the same scenes in eligible fights. Enter, Space or Esc skips
 the cut-in without replaying or cancelling damage. The animation pack does
